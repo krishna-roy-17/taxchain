@@ -3,24 +3,572 @@
   "metadata": {
     "name": "taxpay",
     "version": "0.1.0",
-    "spec": "0.1.0",
-    "description": "Created with Anchor"
+    "spec": "0.1.0"
   },
   "instructions": [
     {
-      "name": "initialize",
+      "name": "initialize_business",
+      "docs": [
+        "Initialize a business registry account.",
+        "Every business must call this once before accepting payments."
+      ],
       "discriminator": [
-        175,
-        175,
-        109,
-        31,
-        13,
-        152,
-        155,
+        224,
+        230,
+        190,
+        93,
+        141,
+        151,
+        35,
         237
       ],
-      "accounts": [],
-      "args": []
+      "accounts": [
+        {
+          "name": "business_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  115,
+                  105,
+                  110,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "government_wallet"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "business_name",
+          "type": "string"
+        },
+        {
+          "name": "tax_rate_bps",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "pay_with_tax",
+      "docs": [
+        "Core payment instruction.",
+        "Payer sends `total_lamports` which is split automatically:",
+        "- tax portion  → government_wallet",
+        "- net portion  → business owner wallet",
+        "- a TaxRecord PDA is created to permanently log this transaction"
+      ],
+      "discriminator": [
+        193,
+        73,
+        76,
+        218,
+        35,
+        17,
+        249,
+        128
+      ],
+      "accounts": [
+        {
+          "name": "business_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  115,
+                  105,
+                  110,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "business_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tax_record",
+          "docs": [
+            "The unique PDA for this specific transaction record"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  120,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "business_account"
+              },
+              {
+                "kind": "account",
+                "path": "business_account.transaction_count",
+                "account": "BusinessAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "business_owner",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "business_account"
+          ]
+        },
+        {
+          "name": "government_wallet",
+          "writable": true,
+          "relations": [
+            "business_account"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "total_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "invoice_ipfs_hash",
+          "type": "string"
+        },
+        {
+          "name": "product_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_government_wallet",
+      "docs": [
+        "Update government wallet (only business owner can call)"
+      ],
+      "discriminator": [
+        253,
+        30,
+        112,
+        71,
+        66,
+        232,
+        39,
+        4
+      ],
+      "accounts": [
+        {
+          "name": "business_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  115,
+                  105,
+                  110,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "business_account"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_government_wallet",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_tax_rate",
+      "docs": [
+        "Update tax rate (only business owner can call)"
+      ],
+      "discriminator": [
+        203,
+        159,
+        87,
+        153,
+        34,
+        252,
+        166,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "business_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  115,
+                  105,
+                  110,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "business_account"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_tax_rate_bps",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BusinessAccount",
+      "discriminator": [
+        100,
+        69,
+        101,
+        155,
+        14,
+        22,
+        236,
+        75
+      ]
+    },
+    {
+      "name": "TaxRecord",
+      "discriminator": [
+        4,
+        103,
+        197,
+        222,
+        200,
+        0,
+        5,
+        198
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BusinessInitialized",
+      "discriminator": [
+        165,
+        8,
+        188,
+        170,
+        84,
+        188,
+        149,
+        113
+      ]
+    },
+    {
+      "name": "PaymentProcessed",
+      "discriminator": [
+        22,
+        109,
+        191,
+        213,
+        83,
+        63,
+        120,
+        219
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidTaxRate",
+      "msg": "Tax rate cannot exceed 100% (10000 bps)"
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Payment amount must be greater than zero"
+    },
+    {
+      "code": 6002,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6003,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds to complete payment"
+    },
+    {
+      "code": 6004,
+      "name": "NotBusinessOwner",
+      "msg": "Only the business owner can perform this action"
+    },
+    {
+      "code": 6005,
+      "name": "NameTooLong",
+      "msg": "Business name must be 64 characters or less"
+    },
+    {
+      "code": 6006,
+      "name": "HashTooLong",
+      "msg": "IPFS hash must be 64 characters or less"
+    }
+  ],
+  "types": [
+    {
+      "name": "BusinessAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "government_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "tax_rate_bps",
+            "type": "u64"
+          },
+          {
+            "name": "total_revenue",
+            "type": "u64"
+          },
+          {
+            "name": "total_tax_collected",
+            "type": "u64"
+          },
+          {
+            "name": "transaction_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BusinessInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "government_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "tax_rate_bps",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PaymentProcessed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "tax_amount",
+            "type": "u64"
+          },
+          {
+            "name": "net_amount",
+            "type": "u64"
+          },
+          {
+            "name": "tax_rate_bps",
+            "type": "u64"
+          },
+          {
+            "name": "product_name",
+            "type": "string"
+          },
+          {
+            "name": "invoice_ipfs_hash",
+            "type": "string"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TaxRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "business",
+            "type": "pubkey"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
+          },
+          {
+            "name": "business_owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "government_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "tax_amount",
+            "type": "u64"
+          },
+          {
+            "name": "net_amount",
+            "type": "u64"
+          },
+          {
+            "name": "tax_rate_bps",
+            "type": "u64"
+          },
+          {
+            "name": "product_name",
+            "type": "string"
+          },
+          {
+            "name": "invoice_ipfs_hash",
+            "type": "string"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "transaction_index",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
     }
   ]
 }

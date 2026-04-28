@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
-import idl from "../idl/taxpay.json";
+import idlJson from "../idl/taxpay.json";
 import {
   PROGRAM_ID,
   BUSINESS_SEED,
@@ -14,19 +14,28 @@ export function useProgram() {
   const { connection } = useConnection();
   const wallet = useWallet();
 
+  // ── Provider ──────────────────────────────────────────────
   const provider = useMemo(() => {
-  if (!wallet || !wallet.publicKey) return null;
+    if (!wallet || !wallet.publicKey || !wallet.signTransaction) return null;
+    return new AnchorProvider(connection, wallet as any, {
+      commitment: "confirmed",
+      preflightCommitment: "confirmed",
+    });
+  }, [connection, wallet]);
 
-  return new AnchorProvider(
-    connection,
-    wallet as any,
-    { commitment: "confirmed" }
-  );
-}, [connection, wallet]);
-
+  // ── Program ───────────────────────────────────────────────
+  // Anchor 0.30.x: new Program(idl, provider) — only 2 args
+  // The program ID is read from idl.address
   const program = useMemo(() => {
     if (!provider) return null;
-    return new Program(idl as any, PROGRAM_ID, provider);
+    try {
+      const p = new Program(idlJson as any, provider);
+      console.log("✅ Program created. Available methods:", Object.keys(p.methods));
+      return p;
+    } catch (e) {
+      console.error("❌ Program creation failed:", e);
+      return null;
+    }
   }, [provider]);
 
   // ── Derive Business PDA ───────────────────────────────────
@@ -59,10 +68,15 @@ export function useProgram() {
     governmentWallet: PublicKey
   ) => {
     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
-
     const [businessPDA] = getBusinessPDA(wallet.publicKey);
 
-    const tx = await program.methods
+    console.log("Calling initializeBusiness...");
+    console.log("  businessPDA:", businessPDA.toBase58());
+    console.log("  owner:", wallet.publicKey.toBase58());
+    console.log("  govWallet:", governmentWallet.toBase58());
+    console.log("  taxRateBps:", taxRateBps);
+
+    const tx = await (program.methods as any)
       .initializeBusiness(businessName, new BN(taxRateBps))
       .accounts({
         businessAccount: businessPDA,
@@ -80,10 +94,9 @@ export function useProgram() {
     if (!program) return null;
     const owner = ownerPubkey || wallet.publicKey;
     if (!owner) return null;
-
     try {
       const [businessPDA] = getBusinessPDA(owner);
-      const account = await program.account.businessAccount.fetch(businessPDA);
+      const account = await (program.account as any).businessAccount.fetch(businessPDA);
       return { account, businessPDA };
     } catch {
       return null;
@@ -100,20 +113,18 @@ export function useProgram() {
     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
 
     const [businessPDA] = getBusinessPDA(businessOwnerPubkey);
-    let businessData;
-try {
-  businessData = await program.account.businessAccount.fetch(businessPDA);
-} catch {
-  throw new Error("Business not initialized");
-}
+    let businessData: any;
+    try {
+      businessData = await (program.account as any).businessAccount.fetch(businessPDA);
+    } catch {
+      throw new Error("Business not initialized. Go to Setup tab first.");
+    }
+
     const txIndex = businessData.transactionCount.toNumber();
-
     const [taxRecordPDA] = getTaxRecordPDA(businessPDA, txIndex);
-
-    // Compute split for UI display
     const split = calcTaxSplit(totalLamports, businessData.taxRateBps.toNumber());
 
-    const tx = await program.methods
+    const tx = await (program.methods as any)
       .payWithTax(
         new BN(totalLamports),
         invoiceIpfsHash.slice(0, 64),
@@ -132,29 +143,26 @@ try {
     return { tx, taxRecordPDA, split };
   };
 
-  // ── Fetch All Tax Records for a Business ──────────────────
+  // ── Fetch All Tax Records ─────────────────────────────────
   const fetchTaxRecords = async (businessOwnerPubkey?: PublicKey) => {
     if (!program) return [];
     const owner = businessOwnerPubkey || wallet.publicKey;
     if (!owner) return [];
-
     try {
       const [businessPDA] = getBusinessPDA(owner);
-      const bizData = await program.account.businessAccount.fetch(businessPDA);
+      const bizData = await (program.account as any).businessAccount.fetch(businessPDA);
       const count = bizData.transactionCount.toNumber();
-
       const records = await Promise.all(
         Array.from({ length: count }, async (_, i) => {
           const [recordPDA] = getTaxRecordPDA(businessPDA, i);
           try {
-            const rec = await program.account.taxRecord.fetch(recordPDA);
+            const rec = await (program.account as any).taxRecord.fetch(recordPDA);
             return { ...rec, pda: recordPDA };
           } catch {
             return null;
           }
         })
       );
-
       return records.filter(Boolean);
     } catch {
       return [];
@@ -164,17 +172,14 @@ try {
   // ── Update Tax Rate ───────────────────────────────────────
   const updateTaxRate = async (newTaxRateBps: number) => {
     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
-
     const [businessPDA] = getBusinessPDA(wallet.publicKey);
-
-    const tx = await program.methods
+    const tx = await (program.methods as any)
       .updateTaxRate(new BN(newTaxRateBps))
       .accounts({
         businessAccount: businessPDA,
         owner: wallet.publicKey,
       })
       .rpc({ commitment: "confirmed" });
-
     return tx;
   };
 

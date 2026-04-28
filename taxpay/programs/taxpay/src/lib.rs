@@ -185,14 +185,17 @@ pub mod taxpay {
 pub struct InitializeBusiness<'info> {
     #[account(
         init,
-        payer = owner,
+        payer = owner,                                    // FIX 1: owner must be mut (see below)
         space = BusinessAccount::LEN,
         seeds = [b"business", owner.key().as_ref()],
         bump
     )]
     pub business_account: Account<'info, BusinessAccount>,
 
-    #[account(mut)]
+    // FIX 2: removed the stray `business: Account<'info, Business>` field —
+    //         it referenced a non-existent type and broke Bumps derivation.
+
+    #[account(mut)]                                       // FIX 3: payer must be `mut`
     pub owner: Signer<'info>,
 
     /// CHECK: This is the government/tax authority wallet address — not a program account
@@ -209,10 +212,10 @@ pub struct PayWithTax<'info> {
         seeds = [b"business", business_owner.key().as_ref()],
         bump = business_account.bump,
         has_one = government_wallet,
-        has_one = owner @ TaxPayError::NotBusinessOwner,
+        has_one = owner @ TaxPayError::NotBusinessOwner,  // FIX 4: `owner` field added below
     )]
     pub business_account: Account<'info, BusinessAccount>,
-pub owner: Signer<'info>,
+
     /// The unique PDA for this specific transaction record
     #[account(
         init,
@@ -233,6 +236,10 @@ pub owner: Signer<'info>,
     /// CHECK: Business owner wallet — receives net payment
     #[account(mut, address = business_account.owner)]
     pub business_owner: AccountInfo<'info>,
+
+    // FIX 4: `has_one = owner` requires an `owner` field in this struct.
+    // We expose it as a read-only Signer so the constraint resolves correctly.
+    pub owner: Signer<'info>,
 
     /// CHECK: Government wallet — receives tax
     #[account(mut, address = business_account.government_wallet)]
