@@ -15,41 +15,25 @@ export function PaymentForm() {
   const { publicKey } = useWallet();
   const { payWithTax, fetchBusiness } = useProgram();
 
-  // Mode: "create" = business creates invoice | "pay" = customer pays
   const [mode, setMode] = useState<"create" | "pay">("create");
 
-  // Invoice fields
   const [productName, setProductName] = useState("");
   const [amountSol, setAmountSol] = useState("");
   const [businessOwnerAddr, setBusinessOwnerAddr] = useState("");
   const [ipfsHash, setIpfsHash] = useState("");
 
-  // Fetched business info
   const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [loadingBiz, setLoadingBiz] = useState(false);
 
-  // Payment result
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ tx: string; taxAmount: number; netAmount: number } | null>(null);
   const [error, setError] = useState("");
 
-  // QR code data
   const [qrData, setQrData] = useState("");
 
   const lamports = solToLamports(parseFloat(amountSol) || 0);
   const taxRateBps = businessInfo?.taxRateBps?.toNumber() || 1300;
   const split = calcTaxSplit(lamports, taxRateBps);
-
-  const fetchBusinessInfo = async () => {
-    if (!businessOwnerAddr) return;
-    setLoadingBiz(true);
-    try {
-      const pk = new PublicKey(businessOwnerAddr.trim());
-      const { fetchBusiness: fb } = useProgram();
-      // We'll use the hook below
-    } catch {}
-    setLoadingBiz(false);
-  };
 
   // Auto-fill business owner from connected wallet when in create mode
   useEffect(() => {
@@ -58,17 +42,38 @@ export function PaymentForm() {
     }
   }, [mode, publicKey]);
 
+  // Fetch business info whenever businessOwnerAddr changes (FIXED - was broken before)
+  useEffect(() => {
+    if (!businessOwnerAddr) return;
+    const fetchInfo = async () => {
+      setLoadingBiz(true);
+      try {
+        const pk = new PublicKey(businessOwnerAddr.trim());
+        const result = await fetchBusiness(pk);
+        if (result) setBusinessInfo(result.account);
+      } catch {}
+      setLoadingBiz(false);
+    };
+    fetchInfo();
+  }, [businessOwnerAddr]);
+
   // Generate QR data when invoice is ready
   useEffect(() => {
     if (productName && amountSol && businessOwnerAddr) {
-      const payload = JSON.stringify({
-        app: "taxpay",
-        product: productName,
-        amountSol: parseFloat(amountSol),
-        businessOwner: businessOwnerAddr,
-        ipfsHash,
-      });
-      setQrData(payload);
+      try {
+        const ownerPK = new PublicKey(businessOwnerAddr.trim());
+        const amount = parseFloat(amountSol);
+        if (amount > 0) {
+          const amount_str = amount.toFixed(9).replace(/\.?0+$/, "");
+          const label = encodeURIComponent(businessOwnerAddr.slice(0, 20));
+          const message = encodeURIComponent(productName);
+          const memo = encodeURIComponent(productName.slice(0, 32));
+          const url = `solana:${ownerPK.toBase58()}?amount=${amount_str}&label=${label}&message=${message}&memo=${memo}`;
+          setQrData(url);
+        }
+      } catch {
+        setQrData("");
+      }
     } else {
       setQrData("");
     }
@@ -92,6 +97,13 @@ export function PaymentForm() {
         productName,
         ipfsHash
       );
+
+      // Re-fetch business info so dashboard shows updated totals when you navigate back
+      try {
+        const updated = await fetchBusiness(ownerPK);
+        if (updated) setBusinessInfo(updated.account);
+      } catch {}
+
       setResult({ tx, taxAmount: s.taxAmount, netAmount: s.netAmount });
     } catch (e: any) {
       setError(e?.message || "Transaction failed");
@@ -104,7 +116,6 @@ export function PaymentForm() {
     return (
       <PageWrapper>
         <div className="card animate-slide-up" style={{ maxWidth: 580, margin: "0 auto" }}>
-          {/* Success header */}
           <div
             style={{
               background: "var(--green-dim)",
@@ -124,7 +135,6 @@ export function PaymentForm() {
             </p>
           </div>
 
-          {/* Split summary */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
             <SplitCard
               icon="💰"
@@ -140,7 +150,6 @@ export function PaymentForm() {
             />
           </div>
 
-          {/* Tx signature */}
           <div
             style={{
               background: "var(--bg)",
@@ -251,6 +260,16 @@ export function PaymentForm() {
                     Auto-filled with your connected wallet
                   </div>
                 )}
+                {loadingBiz && (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                    Loading business info...
+                  </div>
+                )}
+                {businessInfo && !loadingBiz && (
+                  <div style={{ fontSize: 12, color: "var(--green)", marginTop: 4 }}>
+                    ✓ {businessInfo.name} · {businessInfo.taxRateBps.toNumber() / 100}% tax rate
+                  </div>
+                )}
               </div>
 
               {/* Product name */}
@@ -347,7 +366,6 @@ export function PaymentForm() {
 
           {/* Right panel: split preview + QR */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Tax split preview */}
             <div className="card">
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 16 }}>
                 PAYMENT SPLIT PREVIEW
@@ -375,7 +393,6 @@ export function PaymentForm() {
                 />
               </div>
 
-              {/* Visual bar */}
               {lamports > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div
@@ -419,7 +436,6 @@ export function PaymentForm() {
               )}
             </div>
 
-            {/* QR Code */}
             {qrData && (
               <div className="card" style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 16 }}>

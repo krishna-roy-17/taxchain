@@ -30,10 +30,20 @@ export function Dashboard({ setView }: Props) {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // FIX: runs when wallet connects AND every time Dashboard re-mounts
+  // (re-mounts happen every time you navigate back to the dashboard tab)
   useEffect(() => {
     if (!publicKey) return;
     load();
   }, [publicKey]);
+
+  // FIX: also re-fetch on first mount even if publicKey didn't change
+  // This covers navigating back from the Pay tab after a payment
+  useEffect(() => {
+    if (!publicKey) return;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -318,7 +328,6 @@ function StatCard({
 function Hero({ setView }: { setView: (v: View) => void }) {
   return (
     <div style={{ textAlign: "center", padding: "80px 24px" }}>
-      {/* Glow blob */}
       <div
         style={{
           position: "absolute",
@@ -373,7 +382,6 @@ function Hero({ setView }: { setView: (v: View) => void }) {
           </button>
         </div>
 
-        {/* Feature grid */}
         <div
           style={{
             display: "grid",
