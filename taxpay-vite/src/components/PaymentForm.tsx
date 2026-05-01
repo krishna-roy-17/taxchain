@@ -35,14 +35,12 @@ export function PaymentForm() {
   const taxRateBps = businessInfo?.taxRateBps?.toNumber() || 1300;
   const split = calcTaxSplit(lamports, taxRateBps);
 
-  // Auto-fill business owner from connected wallet when in create mode
   useEffect(() => {
     if (mode === "create" && publicKey) {
       setBusinessOwnerAddr(publicKey.toBase58());
     }
   }, [mode, publicKey]);
 
-  // Fetch business info whenever businessOwnerAddr changes (FIXED - was broken before)
   useEffect(() => {
     if (!businessOwnerAddr) return;
     const fetchInfo = async () => {
@@ -57,19 +55,21 @@ export function PaymentForm() {
     fetchInfo();
   }, [businessOwnerAddr]);
 
-  // Generate QR data when invoice is ready
   useEffect(() => {
     if (productName && amountSol && businessOwnerAddr) {
       try {
-        const ownerPK = new PublicKey(businessOwnerAddr.trim());
+        new PublicKey(businessOwnerAddr.trim());
         const amount = parseFloat(amountSol);
         if (amount > 0) {
-          const amount_str = amount.toFixed(9).replace(/\.?0+$/, "");
-          const label = encodeURIComponent(businessOwnerAddr.slice(0, 20));
-          const message = encodeURIComponent(productName);
-          const memo = encodeURIComponent(productName.slice(0, 32));
-          const url = `solana:${ownerPK.toBase58()}?amount=${amount_str}&label=${label}&message=${message}&memo=${memo}`;
-          setQrData(url);
+          const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
+          const amountStr = amount.toFixed(9).replace(/\.?0+$/, "");
+          const productEncoded = encodeURIComponent(productName.slice(0, 64));
+
+          // ✅ Use PATH params instead of query params
+          // Phantom preserves path params when making POST requests
+          const apiUrl = `${apiBase}/api/pay/${businessOwnerAddr.trim()}/${amountStr}/${productEncoded}`;
+          const qrUrl = `solana:${apiUrl}`;
+          setQrData(qrUrl);
         }
       } catch {
         setQrData("");
@@ -98,7 +98,6 @@ export function PaymentForm() {
         ipfsHash
       );
 
-      // Re-fetch business info so dashboard shows updated totals when you navigate back
       try {
         const updated = await fetchBusiness(ownerPK);
         if (updated) setBusinessInfo(updated.account);
@@ -136,18 +135,8 @@ export function PaymentForm() {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-            <SplitCard
-              icon="💰"
-              label="Business Received"
-              amount={`${lamportsToSol(result.netAmount).toFixed(6)} SOL`}
-              color="var(--accent)"
-            />
-            <SplitCard
-              icon="🏛"
-              label="Tax (Government)"
-              amount={`${lamportsToSol(result.taxAmount).toFixed(6)} SOL`}
-              color="var(--yellow)"
-            />
+            <SplitCard icon="💰" label="Business Received" amount={`${lamportsToSol(result.netAmount).toFixed(6)} SOL`} color="var(--accent)" />
+            <SplitCard icon="🏛" label="Tax (Government)" amount={`${lamportsToSol(result.taxAmount).toFixed(6)} SOL`} color="var(--yellow)" />
           </div>
 
           <div
@@ -246,7 +235,6 @@ export function PaymentForm() {
           {/* Main form */}
           <div className="card">
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {/* Business owner address */}
               <div>
                 <label style={labelStyle}>Business Owner Address *</label>
                 <input
@@ -272,7 +260,6 @@ export function PaymentForm() {
                 )}
               </div>
 
-              {/* Product name */}
               <div>
                 <label style={labelStyle}>Product / Service *</label>
                 <input
@@ -284,7 +271,6 @@ export function PaymentForm() {
                 />
               </div>
 
-              {/* Amount */}
               <div>
                 <label style={labelStyle}>Total Amount (SOL) *</label>
                 <input
@@ -301,13 +287,10 @@ export function PaymentForm() {
                 </div>
               </div>
 
-              {/* IPFS hash (optional) */}
               <div>
                 <label style={labelStyle}>
                   Invoice IPFS Hash{" "}
-                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
-                    (optional)
-                  </span>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
                 </label>
                 <input
                   className="input mono-input"
@@ -316,6 +299,24 @@ export function PaymentForm() {
                   onChange={(e) => setIpfsHash(e.target.value)}
                   maxLength={64}
                 />
+              </div>
+
+              <div
+                style={{
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "12px 16px",
+                  fontSize: 13,
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.6,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}>
+                  💡 Two ways to pay:
+                </div>
+                <div>📱 <strong>QR Code</strong> → Customer scans with Phantom app → Smart contract called automatically</div>
+                <div style={{ marginTop: 4 }}>⚡ <strong>Pay button</strong> → Your connected wallet pays directly → Use when customer pays cash</div>
               </div>
 
               {error && (
@@ -364,71 +365,26 @@ export function PaymentForm() {
             </div>
           </div>
 
-          {/* Right panel: split preview + QR */}
+          {/* Right panel */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div className="card">
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 16 }}>
                 PAYMENT SPLIT PREVIEW
               </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <SplitRow
-                  label="Total (customer pays)"
-                  value={`${lamportsToSol(lamports).toFixed(6)} SOL`}
-                  color="var(--text-primary)"
-                  bold
-                />
+                <SplitRow label="Total (customer pays)" value={`${lamportsToSol(lamports).toFixed(6)} SOL`} color="var(--text-primary)" bold />
                 <div style={{ height: 1, background: "var(--border)" }} />
-                <SplitRow
-                  label={`→ Business (net)`}
-                  value={`${lamportsToSol(split.netAmount).toFixed(6)} SOL`}
-                  color="var(--accent)"
-                  icon="💰"
-                />
-                <SplitRow
-                  label={`→ Gov. Tax (${taxRateBps / 100}%)`}
-                  value={`${lamportsToSol(split.taxAmount).toFixed(6)} SOL`}
-                  color="var(--yellow)"
-                  icon="🏛"
-                />
+                <SplitRow label="→ Business (net)" value={`${lamportsToSol(split.netAmount).toFixed(6)} SOL`} color="var(--accent)" icon="💰" />
+                <SplitRow label={`→ Gov. Tax (${taxRateBps / 100}%)`} value={`${lamportsToSol(split.taxAmount).toFixed(6)} SOL`} color="var(--yellow)" icon="🏛" />
               </div>
 
               {lamports > 0 && (
                 <div style={{ marginTop: 16 }}>
-                  <div
-                    style={{
-                      height: 8,
-                      borderRadius: 999,
-                      background: "var(--border)",
-                      overflow: "hidden",
-                      display: "flex",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${(split.netAmount / lamports) * 100}%`,
-                        background: "var(--accent)",
-                        borderRadius: "999px 0 0 999px",
-                        transition: "width 0.3s ease",
-                      }}
-                    />
-                    <div
-                      style={{
-                        flex: 1,
-                        background: "var(--yellow)",
-                        borderRadius: "0 999px 999px 0",
-                      }}
-                    />
+                  <div style={{ height: 8, borderRadius: 999, background: "var(--border)", overflow: "hidden", display: "flex" }}>
+                    <div style={{ width: `${(split.netAmount / lamports) * 100}%`, background: "var(--accent)", borderRadius: "999px 0 0 999px", transition: "width 0.3s ease" }} />
+                    <div style={{ flex: 1, background: "var(--yellow)", borderRadius: "0 999px 999px 0" }} />
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 11,
-                      marginTop: 4,
-                      color: "var(--text-muted)",
-                    }}
-                  >
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 4, color: "var(--text-muted)" }}>
                     <span>Business {(100 - taxRateBps / 100).toFixed(1)}%</span>
                     <span>Tax {(taxRateBps / 100).toFixed(1)}%</span>
                   </div>
@@ -438,22 +394,55 @@ export function PaymentForm() {
 
             {qrData && (
               <div className="card" style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em", marginBottom: 8 }}>
                   PAYMENT QR CODE
                 </div>
-                <div
-                  style={{
-                    display: "inline-block",
-                    padding: 12,
-                    background: "white",
-                    borderRadius: 8,
-                  }}
-                >
+
+                {!import.meta.env.VITE_API_URL && (
+                  <div
+                    style={{
+                      background: "var(--yellow-dim)",
+                      border: "1px solid var(--yellow)",
+                      borderRadius: 6,
+                      padding: "8px 10px",
+                      fontSize: 11,
+                      color: "var(--yellow)",
+                      marginBottom: 10,
+                      textAlign: "left",
+                    }}
+                  >
+                    ⚠ Set VITE_API_URL in .env to enable QR smart contract payments
+                  </div>
+                )}
+
+                <div style={{ display: "inline-block", padding: 12, background: "white", borderRadius: 8 }}>
                   <QRCodeSVG value={qrData} size={160} />
                 </div>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
-                  Customer scans to pay automatically
-                </p>
+
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                    📱 Customer scans with <strong>Phantom app</strong>
+                  </p>
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "4px 0 0" }}>
+                    Tax splits automatically via smart contract
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    background: "var(--bg)",
+                    borderRadius: 6,
+                    padding: "8px 10px",
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    fontFamily: "var(--font-mono)",
+                    wordBreak: "break-all",
+                    textAlign: "left",
+                  }}
+                >
+                  {qrData.slice(0, 100)}...
+                </div>
               </div>
             )}
           </div>
@@ -463,63 +452,24 @@ export function PaymentForm() {
   );
 }
 
-function SplitCard({
-  icon,
-  label,
-  amount,
-  color,
-}: {
-  icon: string;
-  label: string;
-  amount: string;
-  color: string;
-}) {
+function SplitCard({ icon, label, amount, color }: { icon: string; label: string; amount: string; color: string }) {
   return (
-    <div
-      style={{
-        background: "var(--bg)",
-        border: `1px solid ${color}44`,
-        borderRadius: 10,
-        padding: 16,
-        textAlign: "center",
-      }}
-    >
+    <div style={{ background: "var(--bg)", border: `1px solid ${color}44`, borderRadius: 10, padding: 16, textAlign: "center" }}>
       <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
       <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontWeight: 800, fontSize: 16, color, fontFamily: "var(--font-mono)" }}>
-        {amount}
-      </div>
+      <div style={{ fontWeight: 800, fontSize: 16, color, fontFamily: "var(--font-mono)" }}>{amount}</div>
     </div>
   );
 }
 
-function SplitRow({
-  label,
-  value,
-  color,
-  icon,
-  bold,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  icon?: string;
-  bold?: boolean;
-}) {
+function SplitRow({ label, value, color, icon, bold }: { label: string; value: string; color: string; icon?: string; bold?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
       <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>
         {icon && <span style={{ marginRight: 4 }}>{icon}</span>}
         {label}
       </span>
-      <span
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 13,
-          color,
-          fontWeight: bold ? 800 : 600,
-        }}
-      >
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color, fontWeight: bold ? 800 : 600 }}>
         {value}
       </span>
     </div>

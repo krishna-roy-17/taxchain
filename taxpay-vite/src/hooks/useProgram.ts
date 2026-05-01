@@ -11,7 +11,7 @@ import {
 } from "../utils/constants";
 
 // ─────────────────────────────────────────────────────────────
-//  PDA HELPERS (exported so UI components can use them too)
+//  PDA HELPERS
 // ─────────────────────────────────────────────────────────────
 
 export function deriveBusinessPDA(ownerPubkey: PublicKey): [PublicKey, number] {
@@ -43,7 +43,6 @@ export function buildSolanaPayUrl(
   const label = encodeURIComponent(businessName);
   const message = encodeURIComponent(productName);
   const memo = encodeURIComponent(productName.slice(0, 32));
-
   const query = `amount=${amount}&label=${label}&message=${message}&memo=${memo}`;
   return `solana:${recipientPubkey.toBase58()}?${query}`;
 }
@@ -69,8 +68,6 @@ export function useProgram() {
   const program = useMemo(() => {
     if (!provider) return null;
     try {
-      // FIX: Program constructor takes (idl, provider) — no PROGRAM_ID needed,
-      // Anchor reads it from idlJson.address which must match constants.ts PROGRAM_ID
       const p = new Program(idlJson as any, provider);
       console.log("✅ Program ready. Methods:", Object.keys(p.methods));
       console.log("✅ Program ID:", p.programId.toBase58());
@@ -82,8 +79,6 @@ export function useProgram() {
   }, [provider]);
 
   // ── Initialize Business ───────────────────────────────────
-  // FIX: IDL instruction is "initialize_business" → Anchor camelCase = initializeBusiness ✅
-  // FIX: was calling .initialize() which does NOT exist in the IDL → simulation failure
   const initializeBusiness = async (
     businessName: string,
     taxRateBps: number,
@@ -100,7 +95,6 @@ export function useProgram() {
       taxRateBps,
     });
 
-    // FIX: changed .initialize() → .initializeBusiness() to match IDL
     const tx = await (program.methods as any)
       .initializeBusiness(businessName, new BN(taxRateBps))
       .accounts({
@@ -133,15 +127,16 @@ export function useProgram() {
   };
 
   // ── Pay with Tax ──────────────────────────────────────────
-  // FIX 1: Removed manual taxRecord PDA derivation from accounts.
-  //         The IDL seeds for tax_record use business_account.transaction_count
-  //         as an on-chain field reference — Anchor resolves this automatically.
-  //         Passing a manually derived PDA risks a stale txIndex and causes
-  //         Error 2006 (ConstraintSeeds / seeds constraint violated).
+  // FIX: Removed `owner` from accounts entirely.
   //
-  // FIX 2: The IDL marks `owner` as signer: true in pay_with_tax.
-  //         In a demo where payer == owner (same wallet), the wallet adapter
-  //         signs for both automatically. If they differ, owner must sign separately.
+  // The old contract had `owner: Signer` in PayWithTax which meant
+  // the business owner had to co-sign every customer payment.
+  // This made QR code payments impossible — a customer scanning a QR
+  // only signs with their own wallet, not the business owner's wallet.
+  //
+  // The new contract only requires the customer (payer) to sign.
+  // The business_owner is just a recipient AccountInfo, verified on-chain
+  // via `address = business_account.owner` constraint.
   const payWithTax = async (
     businessOwnerPubkey: PublicKey,
     totalLamports: number,
@@ -165,7 +160,7 @@ export function useProgram() {
       );
     }
 
-    // ── 3. Calc split for return value only (not used in tx) ─
+    // ── 3. Calc split for return value only ───────────────
     const split = calcTaxSplit(
       totalLamports,
       businessData.taxRateBps.toNumber()
@@ -173,18 +168,13 @@ export function useProgram() {
 
     console.log("💸 payWithTax →", {
       businessPDA: businessPDA.toBase58(),
-      // taxRecordPDA intentionally omitted — Anchor resolves automatically
-      payer: wallet.publicKey.toBase58(),
-      businessOwner: businessOwnerPubkey.toBase58(),
-      owner: businessOwnerPubkey.toBase58(),
+      payer: wallet.publicKey.toBase58(),         // customer — the one signing
+      businessOwner: businessOwnerPubkey.toBase58(), // just a recipient, no signature needed
       govWallet: businessData.governmentWallet.toBase58(),
       txIndex: businessData.transactionCount.toNumber(),
       split,
     });
 
-    // FIX: taxRecord removed from accounts — Anchor auto-derives it from
-    //      business_account.transaction_count per the IDL seed definition:
-    //      seeds = ["tax_record", business_account, business_account.transaction_count]
     const tx = await (program.methods as any)
       .payWithTax(
         new BN(totalLamports),
@@ -193,10 +183,10 @@ export function useProgram() {
       )
       .accounts({
         businessAccount: businessPDA,
-        // taxRecord: omitted — resolved automatically by Anchor ✅
-        payer: wallet.publicKey,
-        businessOwner: businessOwnerPubkey,
-        owner: businessOwnerPubkey,
+        // taxRecord omitted — Anchor auto-derives from seeds ✅
+        payer: wallet.publicKey,               // customer signs ✅
+        businessOwner: businessOwnerPubkey,    // just receives funds, no signature ✅
+        // owner field removed — no longer exists in contract ✅
         governmentWallet: businessData.governmentWallet,
         systemProgram: SystemProgram.programId,
       })
@@ -204,7 +194,6 @@ export function useProgram() {
 
     console.log("✅ Payment processed. Tx:", tx);
 
-    // Derive taxRecordPDA post-tx for return value (txIndex was count before tx)
     const txIndex = businessData.transactionCount.toNumber();
     const [taxRecordPDA] = deriveTaxRecordPDA(businessPDA, txIndex);
 
@@ -240,8 +229,6 @@ export function useProgram() {
   };
 
   // ── Update Tax Rate ───────────────────────────────────────
-  // FIX: IDL instruction is "update_tax_rate" → Anchor camelCase = updateTaxRate ✅
-  // No accounts change needed — IDL only requires businessAccount + owner
   const updateTaxRate = async (newTaxRateBps: number) => {
     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
@@ -257,8 +244,6 @@ export function useProgram() {
   };
 
   // ── Update Government Wallet ──────────────────────────────
-  // FIX: IDL instruction is "update_government_wallet" → Anchor camelCase = updateGovernmentWallet ✅
-  // No accounts change needed — IDL only requires businessAccount + owner
   const updateGovernmentWallet = async (newGovWallet: PublicKey) => {
     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);

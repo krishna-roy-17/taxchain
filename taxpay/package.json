@@ -1,6 +1,7 @@
 {
   "name": "taxpay-anchor",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "build": "anchor build",
     "test": "anchor test",
@@ -9,7 +10,7 @@
     "idl:generate": "anchor build && anchor idl parse --file programs/taxpay/src/lib.rs --out target/idl/taxpay.json"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.30.1"
+    "@coral-xyz/anchor": "0.31.0"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

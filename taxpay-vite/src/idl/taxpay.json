@@ -1,5 +1,5 @@
 {
-  "address": "2kBACGEWnZHaiLPySUCudChBKRc57L49PVaCotGZrbyk",
+  "address": "7rCpefks9mQwx9TLnuNbjV6j4dSDYpFpBg6tNw6TJ4Yp",
   "metadata": {
     "name": "taxpay",
     "version": "0.1.0",
@@ -76,6 +76,8 @@
       "name": "pay_with_tax",
       "docs": [
         "Core payment instruction.",
+        "ANY customer can call this — only the customer (payer) needs to sign.",
+        "The business owner does NOT need to sign — they just receive funds.",
         "Payer sends `total_lamports` which is split automatically:",
         "- tax portion  → government_wallet",
         "- net portion  → business owner wallet",
@@ -154,19 +156,18 @@
         },
         {
           "name": "payer",
+          "docs": [
+            "The customer paying — this is the ONLY signer required"
+          ],
           "writable": true,
           "signer": true
         },
         {
           "name": "business_owner",
+          "docs": [
+            "Verified against business_account.owner via address constraint."
+          ],
           "writable": true
-        },
-        {
-          "name": "owner",
-          "signer": true,
-          "relations": [
-            "business_account"
-          ]
         },
         {
           "name": "government_wallet",

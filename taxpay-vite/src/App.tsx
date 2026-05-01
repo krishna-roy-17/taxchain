@@ -58,7 +58,9 @@ function Footer() {
         fontFamily: "var(--font-mono)",
       }}
     >
-      TAXPAY v1.0 · SOLANA DEVNET · BUILT FOR HACKATHON 2024
+      Built on Solana for automatic tax splitting — © 2026 TaxPay. All rights reserved. Built by Krishna Roy,Rishav Shrestha,Swastika Timalsina.
+
+
     </footer>
   );
 }

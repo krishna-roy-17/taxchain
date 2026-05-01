@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/taxpay.json`.
  */
 export type Taxpay = {
-  "address": "2kBACGEWnZHaiLPySUCudChBKRc57L49PVaCotGZrbyk",
+  "address": "7rCpefks9mQwx9TLnuNbjV6j4dSDYpFpBg6tNw6TJ4Yp",
   "metadata": {
     "name": "taxpay",
     "version": "0.1.0",
@@ -80,13 +80,15 @@ export type Taxpay = {
     },
     {
       "name": "payWithTax",
-      "docs": [
-        "Core payment instruction.",
-        "Payer sends `total_lamports` which is split automatically:",
-        "- tax portion  → government_wallet",
-        "- net portion  → business owner wallet",
-        "- a TaxRecord PDA is created to permanently log this transaction"
-      ],
+       "docs": [
+    "Core payment instruction.",
+    "ANY customer can call this — only the customer (payer) needs to sign.",
+    "The business owner does NOT need to sign — they just receive funds.",
+    "Payer sends `total_lamports` which is split automatically:",
+    "- tax portion  → government_wallet",
+    "- net portion  → business owner wallet",
+    "- a TaxRecord PDA is created to permanently log this transaction"
+  ],
       "discriminator": [
         193,
         73,
@@ -97,95 +99,63 @@ export type Taxpay = {
         249,
         128
       ],
-      "accounts": [
+    "accounts": [
+  {
+    "name": "businessAccount",
+    "writable": true,
+    "pda": {
+      "seeds": [
         {
-          "name": "businessAccount",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  98,
-                  117,
-                  115,
-                  105,
-                  110,
-                  101,
-                  115,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "businessOwner"
-              }
-            ]
-          }
+          "kind": "const",
+          "value": [98,117,115,105,110,101,115,115]
         },
         {
-          "name": "taxRecord",
-          "docs": [
-            "The unique PDA for this specific transaction record"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  120,
-                  95,
-                  114,
-                  101,
-                  99,
-                  111,
-                  114,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "businessAccount"
-              },
-              {
-                "kind": "account",
-                "path": "business_account.transaction_count",
-                "account": "businessAccount"
-              }
-            ]
-          }
-        },
-        {
-          "name": "payer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "businessOwner",
-          "writable": true
-        },
-        {
-          "name": "owner",
-          "signer": true,
-          "relations": [
-            "businessAccount"
-          ]
-        },
-        {
-          "name": "governmentWallet",
-          "writable": true,
-          "relations": [
-            "businessAccount"
-          ]
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
+          "kind": "account",
+          "path": "businessOwner"
         }
-      ],
+      ]
+    }
+  },
+  {
+    "name": "taxRecord",
+    "writable": true,
+    "pda": {
+      "seeds": [
+        {
+          "kind": "const",
+          "value": [116,97,120,95,114,101,99,111,114,100]
+        },
+        {
+          "kind": "account",
+          "path": "businessAccount"
+        },
+        {
+          "kind": "account",
+          "path": "business_account.transaction_count",
+          "account": "businessAccount"
+        }
+      ]
+    }
+  },
+  {
+    "name": "payer",
+    "writable": true,
+    "signer": true
+  },
+  {
+    "name": "businessOwner",
+    "writable": true
+  },
+  {
+    "name": "governmentWallet",
+    "writable": true,
+    "relations": ["businessAccount"]
+  },
+  {
+    "name": "systemProgram",
+    "address": "11111111111111111111111111111111"
+  }
+],
       "args": [
         {
           "name": "totalLamports",

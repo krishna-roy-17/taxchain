@@ -2,7 +2,7 @@ import { PublicKey, clusterApiUrl } from "@solana/web3.js";
 
 // ─── Program ────────────────────────────────────────────────
 export const PROGRAM_ID = new PublicKey(
-  "2kBACGEWnZHaiLPySUCudChBKRc57L49PVaCotGZrbyk"
+  "7rCpefks9mQwx9TLnuNbjV6j4dSDYpFpBg6tNw6TJ4Yp"
 );
 
 // ─── Network ─────────────────────────────────────────────────

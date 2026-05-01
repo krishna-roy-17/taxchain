@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
-declare_id!("2kBACGEWnZHaiLPySUCudChBKRc57L49PVaCotGZrbyk");
+declare_id!("7rCpefks9mQwx9TLnuNbjV6j4dSDYpFpBg6tNw6TJ4Yp");
 
 // ─────────────────────────────────────────────────────────────
 //  CONSTANTS
@@ -23,7 +23,7 @@ pub mod taxpay {
     pub fn initialize_business(
         ctx: Context<InitializeBusiness>,
         business_name: String,
-        tax_rate_bps: u64, // e.g. 1300 = 13%
+        tax_rate_bps: u64,
     ) -> Result<()> {
         require!(tax_rate_bps <= MAX_TAX_BPS, TaxPayError::InvalidTaxRate);
         require!(business_name.len() <= 64, TaxPayError::NameTooLong);
@@ -49,6 +49,8 @@ pub mod taxpay {
     }
 
     /// Core payment instruction.
+    /// ANY customer can call this — only the customer (payer) needs to sign.
+    /// The business owner does NOT need to sign — they just receive funds.
     /// Payer sends `total_lamports` which is split automatically:
     ///   - tax portion  → government_wallet
     ///   - net portion  → business owner wallet
@@ -56,7 +58,7 @@ pub mod taxpay {
     pub fn pay_with_tax(
         ctx: Context<PayWithTax>,
         total_lamports: u64,
-        invoice_ipfs_hash: String, // optional IPFS CID, pass "" if unused
+        invoice_ipfs_hash: String,
         product_name: String,
     ) -> Result<()> {
         require!(total_lamports > 0, TaxPayError::ZeroAmount);
@@ -67,9 +69,6 @@ pub mod taxpay {
         let tax_rate_bps = business.tax_rate_bps;
 
         // ── Split calculation ──────────────────────────────────
-        // tax_amount = total * tax_rate / (10000 + tax_rate)
-        // This formula treats `total_lamports` as the INCLUSIVE total
-        // e.g. 1130 lamports at 13% → tax = 130, net = 1000
         let tax_amount = total_lamports
             .checked_mul(tax_rate_bps)
             .ok_or(TaxPayError::MathOverflow)?
@@ -185,17 +184,14 @@ pub mod taxpay {
 pub struct InitializeBusiness<'info> {
     #[account(
         init,
-        payer = owner,                                    // FIX 1: owner must be mut (see below)
+        payer = owner,
         space = BusinessAccount::LEN,
         seeds = [b"business", owner.key().as_ref()],
         bump
     )]
     pub business_account: Account<'info, BusinessAccount>,
 
-    // FIX 2: removed the stray `business: Account<'info, Business>` field —
-    //         it referenced a non-existent type and broke Bumps derivation.
-
-    #[account(mut)]                                       // FIX 3: payer must be `mut`
+    #[account(mut)]
     pub owner: Signer<'info>,
 
     /// CHECK: This is the government/tax authority wallet address — not a program account
@@ -212,7 +208,9 @@ pub struct PayWithTax<'info> {
         seeds = [b"business", business_owner.key().as_ref()],
         bump = business_account.bump,
         has_one = government_wallet,
-        has_one = owner @ TaxPayError::NotBusinessOwner,  // FIX 4: `owner` field added below
+        // FIX: removed has_one = owner — business owner does NOT need to sign.
+        // The customer is the only signer. business_owner is verified via
+        // `address = business_account.owner` constraint on the field below.
     )]
     pub business_account: Account<'info, BusinessAccount>,
 
@@ -230,16 +228,19 @@ pub struct PayWithTax<'info> {
     )]
     pub tax_record: Account<'info, TaxRecord>,
 
+    /// The customer paying — this is the ONLY signer required
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    /// CHECK: Business owner wallet — receives net payment
+    /// CHECK: Business owner wallet — receives net payment.
+    /// Verified against business_account.owner via address constraint.
     #[account(mut, address = business_account.owner)]
     pub business_owner: AccountInfo<'info>,
 
-    // FIX 4: `has_one = owner` requires an `owner` field in this struct.
-    // We expose it as a read-only Signer so the constraint resolves correctly.
-    pub owner: Signer<'info>,
+    // FIX: `owner: Signer` field removed entirely.
+    // Previously this forced the business owner to co-sign every customer payment,
+    // which made QR code payments impossible. The business_owner is now just
+    // a recipient AccountInfo verified by address = business_account.owner.
 
     /// CHECK: Government wallet — receives tax
     #[account(mut, address = business_account.government_wallet)]
