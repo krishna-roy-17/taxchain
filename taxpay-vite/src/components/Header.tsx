@@ -56,21 +56,18 @@ export function Header({ view, setView }: HeaderProps) {
             flexShrink: 0,
           }}
         >
-          <div
+          {/* ✅ Replaced ₿ with favicon.png */}
+          <img
+            src="/favicon.png"
+            alt="TaxPay Logo"
             style={{
               width: 36,
               height: 36,
-              background: "var(--accent)",
               borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
+              objectFit: "contain",
               boxShadow: "0 0 20px var(--accent-glow)",
             }}
-          >
-            ₿
-          </div>
+          />
           <span
             style={{
               fontFamily: "var(--font-display)",
@@ -80,7 +77,7 @@ export function Header({ view, setView }: HeaderProps) {
               letterSpacing: "-0.02em",
             }}
           >
-            TAX<span style={{ color: "var(--accent)" }}>PAY</span>
+               TAX<span style={{ color: "var(--accent)" }}>PAY</span>
           </span>
         </button>
 

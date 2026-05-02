@@ -343,9 +343,9 @@ function Hero({ setView }: { setView: (v: View) => void }) {
       />
 
       <div style={{ position: "relative" }}>
-        <div className="badge badge-purple" style={{ marginBottom: 20, fontSize: 11 }}>
+        {/* <div className="badge badge-purple" style={{ marginBottom: 20, fontSize: 11 }}>
           ⚡ SOLANA DEVNET · HACKATHON BUILD
-        </div>
+        </div> */}
 
         <h1
           style={{
