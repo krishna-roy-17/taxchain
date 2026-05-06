@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useProgram } from "../hooks/useProgram";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../utils/constants";
 
 export function GovernmentDashboard() {
+  const { publicKey } = useWallet();
   const { fetchBusiness, fetchTaxRecords } = useProgram();
 
   const [businessAddr, setBusinessAddr] = useState("");
@@ -16,6 +18,42 @@ export function GovernmentDashboard() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Track whether the connected wallet is a registered business
+  const [isRegistered, setIsRegistered] = useState<boolean | null>(null);
+  const [checkingRegistration, setCheckingRegistration] = useState(false);
+
+  // When wallet connects, check if it's a registered business
+  useEffect(() => {
+    if (!publicKey) {
+      setIsRegistered(null);
+      setBusinessAddr("");
+      setBusiness(null);
+      setRecords([]);
+      return;
+    }
+
+    const checkRegistration = async () => {
+      setCheckingRegistration(true);
+      try {
+        const result = await fetchBusiness(publicKey);
+        if (result) {
+          setIsRegistered(true);
+          setBusinessAddr(publicKey.toBase58());
+        } else {
+          setIsRegistered(false);
+          setBusinessAddr("");
+        }
+      } catch {
+        setIsRegistered(false);
+        setBusinessAddr("");
+      } finally {
+        setCheckingRegistration(false);
+      }
+    };
+
+    checkRegistration();
+  }, [publicKey]);
 
   const handleSearch = async () => {
     setError("");
@@ -46,6 +84,99 @@ export function GovernmentDashboard() {
     0
   );
 
+  // ── Not connected ─────────────────────────────────────────
+  if (!publicKey) {
+    return (
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+        <div style={{ marginBottom: 32 }}>
+          <div className="badge badge-yellow" style={{ marginBottom: 12 }}>
+            🏛 READ-ONLY VIEW
+          </div>
+          <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em" }}>
+            Government Tax Dashboard
+          </h1>
+          <p style={{ color: "var(--text-secondary)", marginTop: 8 }}>
+            Look up any registered business to see their on-chain tax collection in real time.
+          </p>
+        </div>
+        <div
+          style={{
+            background: "var(--yellow-dim)",
+            border: "1px solid var(--yellow)",
+            borderRadius: 12,
+            padding: 24,
+            textAlign: "center",
+            color: "var(--yellow)",
+            fontSize: 15,
+          }}
+        >
+          🔌 Connect your wallet to access the dashboard
+        </div>
+      </div>
+    );
+  }
+
+  // ── Checking registration ─────────────────────────────────
+  if (checkingRegistration) {
+    return (
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+        <div style={{ marginBottom: 32 }}>
+          <div className="badge badge-yellow" style={{ marginBottom: 12 }}>
+            🏛 READ-ONLY VIEW
+          </div>
+          <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em" }}>
+            Government Tax Dashboard
+          </h1>
+        </div>
+        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
+          <div className="spinner" style={{ margin: "0 auto 12px", width: 32, height: 32, borderWidth: 3 }} />
+          Checking registration...
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not registered ────────────────────────────────────────
+  if (isRegistered === false) {
+    return (
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+        <div style={{ marginBottom: 32 }}>
+          <div className="badge badge-yellow" style={{ marginBottom: 12 }}>
+            🏛 READ-ONLY VIEW
+          </div>
+          <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em" }}>
+            Government Tax Dashboard
+          </h1>
+          <p style={{ color: "var(--text-secondary)", marginTop: 8 }}>
+            Look up any registered business to see their on-chain tax collection in real time.
+          </p>
+        </div>
+        <div
+          style={{
+            background: "rgba(255,59,59,0.08)",
+            border: "1px solid var(--red)",
+            borderRadius: 12,
+            padding: 28,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 44, marginBottom: 12 }}>🚫</div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: "var(--red)", marginBottom: 8 }}>
+            Business Not Registered
+          </h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: 14, maxWidth: 420, margin: "0 auto" }}>
+            Your connected wallet{" "}
+            <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-primary)", fontSize: 12 }}>
+              ({shortenAddress(publicKey.toBase58(), 6)})
+            </span>{" "}
+            is not registered as a business. Register your business first to access this dashboard.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Registered — show dashboard ───────────────────────────
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
       {/* Header */}
@@ -81,6 +212,11 @@ export function GovernmentDashboard() {
             {loading ? <><span className="spinner" /> Fetching...</> : "🔍 Look Up"}
           </button>
         </div>
+        {businessAddr === publicKey.toBase58() && (
+          <div style={{ fontSize: 12, color: "var(--green)", marginTop: 6 }}>
+            ✓ Auto-filled with your registered business wallet
+          </div>
+        )}
         {error && (
           <div style={{ marginTop: 12, color: "var(--red)", fontSize: 14 }}>
             ⚠ {error}
