@@ -15,6 +15,7 @@ const NAV_ITEMS: { label: string; view: View; icon: string }[] = [
   { label: "Pay", view: "pay", icon: "⚡" },
   { label: "Government", view: "government", icon: "🏛" },
   { label: "Verify", view: "verify", icon: "✓" },
+  { label: "History",    view: "history",    icon: "🧾" },
 ];
 
 export function Header({ view, setView }: HeaderProps) {
@@ -77,7 +78,7 @@ export function Header({ view, setView }: HeaderProps) {
               letterSpacing: "-0.02em",
             }}
           >
-               TAX<span style={{ color: "var(--accent)" }}>PAY</span>
+               TAX<span style={{ color: "var(--accent)" }}>CHAIN</span>
           </span>
         </button>
 
