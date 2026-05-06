@@ -8,39 +8,43 @@ import {
   lamportsToSol,
   solToLamports,
 } from "../utils/constants";
+import { mintNFTReceipt } from "../utils/nftReceipt";
+
+type Step = "idle" | "paying" | "minting" | "done";
 
 export function PaymentForm() {
-  const { publicKey } = useWallet();
+  const wallet = useWallet();
+  const { publicKey } = wallet;
   const { payWithTax, fetchBusiness } = useProgram();
 
   const [mode, setMode] = useState<"create" | "pay">("pay");
-
   const [productName, setProductName] = useState("");
   const [amountSol, setAmountSol] = useState("");
-  const [businessOwnerAddr, setBusinessOwnerAddr] = useState("");
+  const [businessOwnerAddr, setBizAddr] = useState("");
   const [ipfsHash, setIpfsHash] = useState("");
 
   const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [loadingBiz, setLoadingBiz] = useState(false);
-
   const [myBusinessInfo, setMyBusinessInfo] = useState<any>(null);
   const [checkingMyBiz, setCheckingMyBiz] = useState(false);
   const isBusiness = !!myBusinessInfo;
 
-  const [loading, setLoading] = useState(false);
-  const submittingRef = useRef(false);
-
+  const [step, setStep] = useState<Step>("idle");
+  const [mintNFT, setMintNFT] = useState(true);
+  const [error, setError] = useState("");
   const [result, setResult] = useState<{
     tx: string;
     taxAmount: number;
     netAmount: number;
+    nftMint?: string;
+    nftUrl?: string;
   } | null>(null);
-  const [error, setError] = useState("");
-  const [qrData, setQrData] = useState("");
 
-  // ── QR polling state ──
+  const [qrData, setQrData] = useState("");
   const [qrPending, setQrPending] = useState(false);
   const [qrPollingSeconds, setQrPollingSeconds] = useState(0);
+
+  const submittingRef = useRef(false);
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -48,7 +52,6 @@ export function PaymentForm() {
   const taxRateBps = businessInfo?.taxRateBps?.toNumber() || 1300;
   const split = calcTaxSplit(lamports, taxRateBps);
 
-  // ── Stop QR polling ──
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -62,15 +65,13 @@ export function PaymentForm() {
     setQrPollingSeconds(0);
   }, []);
 
-  // ── Start QR polling ──
   const startQrPolling = useCallback(() => {
     if (!businessOwnerAddr || !productName || !amountSol) return;
-    if (pollingIntervalRef.current) return; // already polling
+    if (pollingIntervalRef.current) return;
 
     setQrPending(true);
     setQrPollingSeconds(0);
 
-    // Elapsed counter
     countdownRef.current = setInterval(() => {
       setQrPollingSeconds((s) => s + 1);
     }, 1000);
@@ -86,7 +87,6 @@ export function PaymentForm() {
           headers: { "ngrok-skip-browser-warning": "69420" },
         });
         const data = await res.json();
-
         if (data.confirmed && data.tx) {
           stopPolling();
           const s = calcTaxSplit(lamports, taxRateBps);
@@ -97,36 +97,27 @@ export function PaymentForm() {
           });
         }
       } catch (e) {
-        // Network hiccup — keep polling
         console.warn("Poll error:", e);
       }
     }, 3000);
   }, [businessOwnerAddr, productName, amountSol, lamports, taxRateBps, stopPolling]);
 
-  // Cleanup on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  // Stop polling if form is cleared
   useEffect(() => {
-    if (!productName || !amountSol || !businessOwnerAddr) {
-      stopPolling();
-    }
+    if (!productName || !amountSol || !businessOwnerAddr) stopPolling();
   }, [productName, amountSol, businessOwnerAddr, stopPolling]);
 
-  // ── AUTO-START polling whenever a valid QR is generated ──
   useEffect(() => {
     if (qrData && mode === "create") {
-      // Reset and restart polling fresh whenever qrData changes
       stopPolling();
-      // Small delay so stopPolling clears refs before startQrPolling checks them
       const t = setTimeout(() => startQrPolling(), 100);
       return () => clearTimeout(t);
     } else {
       stopPolling();
     }
-  }, [qrData, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qrData, mode]); // eslint-disable-line
 
-  // ── Check if connected wallet is a registered business ──
   useEffect(() => {
     if (!publicKey || !fetchBusiness) {
       setMyBusinessInfo(null);
@@ -146,25 +137,22 @@ export function PaymentForm() {
     check();
   }, [publicKey]);
 
-  // Non-business wallets locked to pay mode
   useEffect(() => {
     if (!isBusiness) setMode("pay");
   }, [isBusiness]);
 
-  // Auto-fill business address in create mode
   useEffect(() => {
     if (mode === "create" && publicKey) {
-      setBusinessOwnerAddr(publicKey.toBase58());
+      setBizAddr(publicKey.toBase58());
     } else if (mode === "pay") {
-      setBusinessOwnerAddr("");
+      setBizAddr("");
       setBusinessInfo(null);
     }
   }, [mode, publicKey]);
 
-  // Fetch business info for entered address
   useEffect(() => {
     if (!businessOwnerAddr) return;
-    const fetchInfo = async () => {
+    const go = async () => {
       setLoadingBiz(true);
       try {
         const pk = new PublicKey(businessOwnerAddr.trim());
@@ -176,10 +164,9 @@ export function PaymentForm() {
         setLoadingBiz(false);
       }
     };
-    fetchInfo();
+    go();
   }, [businessOwnerAddr]);
 
-  // Build QR URL
   useEffect(() => {
     if (productName && amountSol && businessOwnerAddr) {
       try {
@@ -187,9 +174,9 @@ export function PaymentForm() {
         const amount = parseFloat(amountSol);
         if (amount > 0) {
           const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3001";
-          const amountStr = amount.toFixed(9).replace(/\.?0+$/, "");
-          const productEncoded = encodeURIComponent(productName.slice(0, 64));
-          const apiUrl = `${apiBase}/api/pay/${businessOwnerAddr.trim()}/${amountStr}/${productEncoded}`;
+          const amtStr = amount.toFixed(9).replace(/\.?0+$/, "");
+          const prodEnc = encodeURIComponent(productName.slice(0, 64));
+          const apiUrl = `${apiBase}/api/pay/${businessOwnerAddr.trim()}/${amtStr}/${prodEnc}`;
           setQrData(`solana:${apiUrl}`);
         } else {
           setQrData("");
@@ -202,11 +189,11 @@ export function PaymentForm() {
     }
   }, [productName, amountSol, businessOwnerAddr, ipfsHash]);
 
-  // ── Direct pay handler ──
   const handlePay = async () => {
-    if (submittingRef.current || loading) return;
+    if (submittingRef.current || step !== "idle") return;
     setError("");
-    setLoading(true);
+    setResult(null);
+    setStep("paying");
     submittingRef.current = true;
 
     try {
@@ -217,29 +204,68 @@ export function PaymentForm() {
         throw new Error("Invalid business owner address");
       }
       if (lamports <= 0) throw new Error("Amount must be greater than 0");
+      if (!productName) throw new Error("Product name is required");
 
-      const { tx, split: s } = await payWithTax(
+      console.log("⚡ Processing payment...");
+      const { tx, split: s, taxRecordPDA } = await payWithTax(
         ownerPK,
         lamports,
         productName,
         ipfsHash
       );
+      console.log("✅ Payment tx:", tx);
 
-      try {
-        const updated = await fetchBusiness(ownerPK);
-        if (updated) setBusinessInfo(updated.account);
-      } catch {}
+      const bizData = await fetchBusiness(ownerPK);
+      const receiptNumber = bizData?.account.transactionCount.toNumber() || 1;
 
-      setResult({ tx, taxAmount: s.taxAmount, netAmount: s.netAmount });
+      let nftMint: string | undefined;
+      let nftUrl: string | undefined;
+
+      if (mintNFT) {
+        setStep("minting");
+        console.log("🧾 Minting NFT receipt...");
+        try {
+          const nftResult = await mintNFTReceipt({
+            wallet,
+            receiptNumber,
+            businessName: bizData?.account.name || "Unknown Business",
+            productName,
+            totalLamports: lamports,
+            taxLamports: s.taxAmount,
+            netLamports: s.netAmount,
+            taxRateBps: bizData?.account.taxRateBps.toNumber() || 1300,
+            timestamp: Math.floor(Date.now() / 1000),
+            txRecordPDA: taxRecordPDA.toBase58(),
+            txSignature: tx,
+            payerWallet: publicKey!.toBase58(),
+            businessWallet: ownerPK.toBase58(),
+            govWallet: bizData?.account.governmentWallet.toBase58() || "",
+          });
+          nftMint = nftResult.mintAddress;
+          nftUrl = nftResult.explorerUrl;
+          console.log("✅ NFT minted:", nftMint);
+        } catch (nftErr: any) {
+          console.error("NFT minting failed (payment ok):", nftErr);
+        }
+      }
+
+      setStep("done");
+      setResult({
+        tx,
+        taxAmount: s.taxAmount,
+        netAmount: s.netAmount,
+        nftMint,
+        nftUrl,
+      });
     } catch (e: any) {
       setError(e?.message || "Transaction failed");
+      setStep("idle");
     } finally {
-      setLoading(false);
       submittingRef.current = false;
     }
   };
 
-  // ── Success screen ─────────────────────────────────────────
+  // ── SUCCESS SCREEN ────────────────────────────────────────
   if (result) {
     return (
       <PageWrapper>
@@ -247,26 +273,29 @@ export function PaymentForm() {
           className="card animate-slide-up"
           style={{ maxWidth: 580, margin: "0 auto" }}
         >
+          {/* Success banner */}
           <div
             style={{
               background: "var(--green-dim)",
               border: "1px solid var(--green)",
               borderRadius: 12,
               padding: 20,
-              marginBottom: 24,
+              marginBottom: 20,
               textAlign: "center",
             }}
           >
             <div style={{ fontSize: 44, marginBottom: 8 }}>✅</div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: "var(--green)" }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--green)" }}>
               Payment Complete!
             </h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 4 }}>
-              Tax automatically split and sent in one transaction
+            <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>
+              {result.nftMint
+                ? "Tax split + NFT receipt minted successfully"
+                : "Tax automatically split in one transaction"}
             </p>
           </div>
 
-          {/* Product & amount summary */}
+          {/* Product summary */}
           {(productName || amountSol) && (
             <div
               style={{
@@ -281,30 +310,52 @@ export function PaymentForm() {
               }}
             >
               <div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    fontFamily: "var(--font-mono)",
+                    marginBottom: 3,
+                  }}
+                >
                   PRODUCT / SERVICE
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>
                   {productName || "—"}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    fontFamily: "var(--font-mono)",
+                    marginBottom: 3,
+                  }}
+                >
                   TOTAL PAID
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
                   {amountSol} SOL
                 </div>
               </div>
             </div>
           )}
 
+          {/* Split cards */}
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: 12,
-              marginBottom: 24,
+              marginBottom: 16,
             }}
           >
             <SplitCard
@@ -321,31 +372,116 @@ export function PaymentForm() {
             />
           </div>
 
+          {/* NFT result */}
+          {result.nftMint ? (
+            <div
+              style={{
+                background:
+                  "linear-gradient(135deg, var(--accent-dim), rgba(0,229,160,0.06))",
+                border: "1px solid var(--accent)",
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 16,
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 10,
+                  background: "var(--accent-dim)",
+                  border: "1px solid var(--accent)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 26,
+                  flexShrink: 0,
+                }}
+              >
+                🧾
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    fontSize: 14,
+                    color: "var(--accent-2)",
+                    marginBottom: 4,
+                  }}
+                >
+                  NFT Receipt Minted! 🎉
+                </div>
+                <div
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    wordBreak: "break-all",
+                    marginBottom: 4,
+                  }}
+                >
+                  {result.nftMint}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                  Open Phantom → Collectibles tab to view
+                </div>
+              </div>
+              <a
+                href={result.nftUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+                style={{ padding: "7px 12px", fontSize: 12, flexShrink: 0 }}
+              >
+                View NFT
+              </a>
+            </div>
+          ) : mintNFT ? (
+            <div
+              style={{
+                background: "var(--yellow-dim)",
+                border: "1px solid var(--yellow)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                marginBottom: 16,
+                fontSize: 12,
+                color: "var(--yellow)",
+              }}
+            >
+              ⚠ NFT minting failed but payment succeeded.
+            </div>
+          ) : null}
+
+          {/* Tx signature */}
           <div
             style={{
               background: "var(--bg)",
               border: "1px solid var(--border)",
               borderRadius: 8,
-              padding: "12px 16px",
+              padding: "12px 14px",
               marginBottom: 16,
               wordBreak: "break-all",
             }}
           >
             <div
               style={{
-                fontSize: 11,
+                fontSize: 10,
                 color: "var(--text-muted)",
                 fontFamily: "var(--font-mono)",
-                marginBottom: 6,
+                marginBottom: 4,
               }}
             >
               TRANSACTION SIGNATURE
             </div>
-            <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>
+            <span className="mono" style={{ fontSize: 11, color: "var(--accent)" }}>
               {result.tx}
             </span>
           </div>
 
+          {/* Action buttons */}
           <div style={{ display: "flex", gap: 8 }}>
             <a
               href={`https://explorer.solana.com/tx/${result.tx}?cluster=devnet`}
@@ -361,6 +497,7 @@ export function PaymentForm() {
               style={{ flex: 1 }}
               onClick={() => {
                 setResult(null);
+                setStep("idle");
                 setProductName("");
                 setAmountSol("");
                 setIpfsHash("");
@@ -375,17 +512,18 @@ export function PaymentForm() {
     );
   }
 
-  // ── Main form ──────────────────────────────────────────────
+  // ── MAIN FORM ─────────────────────────────────────────────
   return (
     <PageWrapper>
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>
             Payment with Auto Tax Split
           </h1>
           <p style={{ color: "var(--text-secondary)", marginTop: 8 }}>
-            Every payment automatically splits: net amount → business, tax →
-            government. One transaction, immutable record.
+            Every payment automatically splits: net → business, tax → government.
+            One transaction, immutable record.
           </p>
         </div>
 
@@ -423,7 +561,6 @@ export function PaymentForm() {
             >
               ✓ Registered Business · {myBusinessInfo.name}
             </div>
-
             <div
               style={{
                 display: "flex",
@@ -437,12 +574,15 @@ export function PaymentForm() {
               {(["create", "pay"] as const).map((m) => (
                 <button
                   key={m}
-                  onClick={() => { setMode(m); stopPolling(); }}
+                  onClick={() => {
+                    setMode(m);
+                    stopPolling();
+                  }}
                   style={{
                     background: mode === m ? "var(--accent)" : "transparent",
                     border: "none",
                     borderRadius: 8,
-                    padding: "10px 24px",
+                    padding: "9px 22px",
                     color: mode === m ? "white" : "var(--text-secondary)",
                     cursor: "pointer",
                     fontFamily: "var(--font-display)",
@@ -472,8 +612,7 @@ export function PaymentForm() {
                 color: "var(--text-secondary)",
               }}
             >
-              ℹ️ Your wallet isn't registered as a business — you can pay any
-              registered business below.&nbsp;
+              ℹ️ Not a registered business — you can pay any business below.&nbsp;
               <span style={{ color: "var(--accent)", fontWeight: 700 }}>
                 Go to Setup to register.
               </span>
@@ -482,7 +621,7 @@ export function PaymentForm() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24 }}>
-          {/* Main form card */}
+          {/* ── LEFT: Form ── */}
           <div className="card">
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               {/* Business address */}
@@ -494,30 +633,33 @@ export function PaymentForm() {
                   className="input mono-input"
                   placeholder="Business wallet public key"
                   value={businessOwnerAddr}
-                  onChange={(e) => setBusinessOwnerAddr(e.target.value)}
+                  onChange={(e) => setBizAddr(e.target.value)}
                   readOnly={mode === "create"}
                   style={mode === "create" ? { opacity: 0.7, cursor: "not-allowed" } : {}}
                 />
                 {mode === "create" && (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                     Auto-filled with your registered business wallet
                   </div>
                 )}
                 {mode === "pay" && loadingBiz && (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                     Looking up business...
                   </div>
                 )}
                 {mode === "pay" && businessInfo && !loadingBiz && (
-                  <div style={{ fontSize: 12, color: "var(--green)", marginTop: 4 }}>
-                    ✓ {businessInfo.name} · {businessInfo.taxRateBps.toNumber() / 100}% tax rate
+                  <div style={{ fontSize: 11, color: "var(--green)", marginTop: 4 }}>
+                    ✓ {businessInfo.name} · {businessInfo.taxRateBps.toNumber() / 100}% tax
                   </div>
                 )}
-                {mode === "pay" && !businessInfo && !loadingBiz && businessOwnerAddr.length > 30 && (
-                  <div style={{ fontSize: 12, color: "var(--red)", marginTop: 4 }}>
-                    ✗ No registered business found at this address
-                  </div>
-                )}
+                {mode === "pay" &&
+                  !businessInfo &&
+                  !loadingBiz &&
+                  businessOwnerAddr.length > 30 && (
+                    <div style={{ fontSize: 11, color: "var(--red)", marginTop: 4 }}>
+                      ✗ No registered business at this address
+                    </div>
+                  )}
               </div>
 
               {/* Product */}
@@ -525,7 +667,7 @@ export function PaymentForm() {
                 <label style={labelStyle}>Product / Service *</label>
                 <input
                   className="input"
-                  placeholder="e.g. Web Design Service"
+                  placeholder="e.g. Momo Set"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                   maxLength={64}
@@ -544,25 +686,79 @@ export function PaymentForm() {
                   value={amountSol}
                   onChange={(e) => setAmountSol(e.target.value)}
                 />
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                  This is the TOTAL {mode === "create" ? "customers" : "you"} will pay (tax included)
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                  Total {mode === "create" ? "customer" : "you"} pays (tax included)
                 </div>
               </div>
 
-              {/* IPFS Hash */}
+              {/* IPFS */}
               <div>
                 <label style={labelStyle}>
                   Invoice IPFS Hash{" "}
-                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
+                    (optional)
+                  </span>
                 </label>
                 <input
                   className="input mono-input"
-                  placeholder="Qm... (upload invoice JSON to IPFS first)"
+                  placeholder="Qm... upload to Pinata first"
                   value={ipfsHash}
                   onChange={(e) => setIpfsHash(e.target.value)}
                   maxLength={64}
                 />
               </div>
+
+              {/* NFT toggle — pay mode only */}
+              {mode === "pay" && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 10,
+                    padding: "12px 16px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
+                      🧾 Mint NFT Receipt
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      Get NFT proof of payment in your Phantom wallet
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => setMintNFT((v) => !v)}
+                    style={{
+                      width: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      background: mintNFT ? "var(--accent)" : "var(--border)",
+                      cursor: "pointer",
+                      position: "relative",
+                      transition: "background 0.2s",
+                      flexShrink: 0,
+                      marginLeft: 16,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 3,
+                        left: mintNFT ? 23 : 3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: "50%",
+                        background: "white",
+                        transition: "left 0.2s",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Info box */}
               <div
@@ -578,26 +774,29 @@ export function PaymentForm() {
               >
                 {mode === "create" ? (
                   <>
-                    <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}>
+                    <div
+                      style={{ fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}
+                    >
                       💡 Two ways customers can pay:
                     </div>
                     <div>
-                      📱 <strong>QR Code</strong> → Customer scans with Phantom app → Smart contract called automatically
+                      📱 <strong>QR Code</strong> → Customer scans with Phantom → Smart
+                      contract runs automatically
                     </div>
                     <div style={{ marginTop: 4 }}>
-                      ⚡ <strong>Pay button</strong> → Your connected wallet pays directly → Use when customer pays cash
+                      ⚡ <strong>Pay button</strong> → Your connected wallet pays directly
                     </div>
                   </>
                 ) : (
                   <>
-                    <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}>
+                    <div
+                      style={{ fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}
+                    >
                       💡 How paying works:
                     </div>
-                    <div>
-                      ⚡ Enter the <strong>business wallet address</strong> above, fill in the amount, then click Pay.
-                    </div>
+                    <div>⚡ Enter the business wallet address, fill amount, click Pay.</div>
                     <div style={{ marginTop: 4 }}>
-                      🏛 Tax is automatically split to the government — you pay the total, the contract does the rest.
+                      🏛 Tax automatically split to government via smart contract.
                     </div>
                   </>
                 )}
@@ -610,9 +809,9 @@ export function PaymentForm() {
                     background: "var(--red-dim)",
                     border: "1px solid var(--red)",
                     borderRadius: 8,
-                    padding: "12px 16px",
+                    padding: "12px 14px",
                     color: "var(--red)",
-                    fontSize: 14,
+                    fontSize: 13,
                   }}
                 >
                   ⚠ {error}
@@ -626,9 +825,9 @@ export function PaymentForm() {
                     background: "var(--yellow-dim)",
                     border: "1px solid var(--yellow)",
                     borderRadius: 8,
-                    padding: "12px 16px",
+                    padding: "12px 14px",
                     color: "var(--yellow)",
-                    fontSize: 14,
+                    fontSize: 13,
                     textAlign: "center",
                   }}
                 >
@@ -637,46 +836,60 @@ export function PaymentForm() {
               ) : (
                 <button
                   className="btn btn-green"
-                  style={{ padding: "16px", fontSize: 16 }}
+                  style={{ padding: "15px", fontSize: 15 }}
                   onClick={handlePay}
                   disabled={
-                    loading ||
-                    submittingRef.current ||
-                    !productName ||
-                    !amountSol ||
-                    !businessOwnerAddr
+                    step !== "idle" || !productName || !amountSol || !businessOwnerAddr
                   }
                 >
-                  {loading ? (
+                  {step === "paying" && (
                     <>
-                      <span className="spinner" /> Processing on Blockchain...
+                      <span className="spinner" /> Processing Payment...
                     </>
-                  ) : mode === "create" ? (
-                    `⚡ Pay ${amountSol || "0"} SOL → Smart Contract`
-                  ) : (
-                    `⚡ Send ${amountSol || "0"} SOL to Business`
                   )}
+                  {step === "minting" && (
+                    <>
+                      <span className="spinner" /> Minting NFT Receipt...
+                    </>
+                  )}
+                  {step === "idle" &&
+                    (mode === "create"
+                      ? `⚡ Pay ${amountSol || "0"} SOL → Smart Contract`
+                      : `⚡ Send ${amountSol || "0"} SOL to Business`)}
                 </button>
+              )}
+
+              {/* Step indicator — pay mode only */}
+              {(step === "paying" || step === "minting") && mintNFT && mode === "pay" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  <StepDot
+                    active={step === "paying"}
+                    done={step === "minting"}
+                    label="1. Payment"
+                  />
+                  <StepLine done={step === "minting"} />
+                  <StepDot active={step === "minting"} done={false} label="2. NFT Receipt" />
+                </div>
               )}
             </div>
           </div>
 
-          {/* Right panel */}
+          {/* ── RIGHT: Preview + QR ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {/* Split preview */}
+            {/* Tax split preview */}
             <div className="card">
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: 700,
                   color: "var(--text-muted)",
-                  letterSpacing: "0.05em",
-                  marginBottom: 16,
+                  letterSpacing: "0.06em",
+                  marginBottom: 14,
                 }}
               >
                 PAYMENT SPLIT PREVIEW
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                 <SplitRow
                   label="Total (customer pays)"
                   value={`${lamportsToSol(lamports).toFixed(6)} SOL`}
@@ -699,10 +912,10 @@ export function PaymentForm() {
               </div>
 
               {lamports > 0 && (
-                <div style={{ marginTop: 16 }}>
+                <div style={{ marginTop: 14 }}>
                   <div
                     style={{
-                      height: 8,
+                      height: 7,
                       borderRadius: 999,
                       background: "var(--border)",
                       overflow: "hidden",
@@ -714,7 +927,7 @@ export function PaymentForm() {
                         width: `${(split.netAmount / lamports) * 100}%`,
                         background: "var(--accent)",
                         borderRadius: "999px 0 0 999px",
-                        transition: "width 0.3s ease",
+                        transition: "width 0.3s",
                       }}
                     />
                     <div
@@ -729,7 +942,7 @@ export function PaymentForm() {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      fontSize: 11,
+                      fontSize: 10,
                       marginTop: 4,
                       color: "var(--text-muted)",
                     }}
@@ -741,15 +954,102 @@ export function PaymentForm() {
               )}
             </div>
 
+            {/* NFT preview card — pay mode only */}
+            {mintNFT && mode === "pay" && (
+              <div className="card" style={{ padding: 20 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--text-muted)",
+                    letterSpacing: "0.06em",
+                    marginBottom: 12,
+                  }}
+                >
+                  NFT RECEIPT PREVIEW
+                </div>
+                <div
+                  style={{
+                    background: "linear-gradient(135deg, #0d0d14, #141420)",
+                    border: "1px solid var(--accent)",
+                    borderRadius: 12,
+                    padding: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>🧾</div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 13,
+                      color: "var(--accent-2)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    TaxChain Receipt
+                  </div>
+                  {[
+                    { k: "Business", v: businessInfo?.name || "—" },
+                    { k: "Product", v: productName || "—" },
+                    { k: "Total", v: amountSol ? `${amountSol} SOL` : "—" },
+                    {
+                      k: "Tax",
+                      v:
+                        lamports > 0
+                          ? `${lamportsToSol(split.taxAmount).toFixed(4)} SOL`
+                          : "—",
+                    },
+                    { k: "Network", v: "Solana Devnet" },
+                    { k: "Verified", v: "✅ On-chain" },
+                  ].map((row) => (
+                    <div
+                      key={row.k}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "5px 0",
+                        borderBottom: "1px solid var(--border)",
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ color: "var(--text-muted)" }}>{row.k}</span>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--text-primary)",
+                          fontFamily:
+                            row.k === "Total" || row.k === "Tax"
+                              ? "var(--font-mono)"
+                              : "inherit",
+                        }}
+                      >
+                        {row.v}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "var(--text-muted)",
+                      marginTop: 10,
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    Minted to your Phantom wallet
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* QR code — create mode only */}
             {mode === "create" && qrData && (
               <div className="card" style={{ textAlign: "center" }}>
                 <div
                   style={{
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: 700,
                     color: "var(--text-muted)",
-                    letterSpacing: "0.05em",
+                    letterSpacing: "0.06em",
                     marginBottom: 8,
                   }}
                 >
@@ -769,7 +1069,7 @@ export function PaymentForm() {
                       textAlign: "left",
                     }}
                   >
-                    ⚠ Set VITE_API_URL in .env to enable QR smart contract payments
+                    ⚠ Set VITE_API_URL in .env to enable QR payments
                   </div>
                 )}
 
@@ -793,11 +1093,9 @@ export function PaymentForm() {
                   </p>
                 </div>
 
-                {/* ── Polling UI — auto-starts when QR is shown ── */}
                 <div style={{ marginTop: 12 }}>
                   {qrPending ? (
                     <>
-                      {/* Animated waiting bar */}
                       <div
                         style={{
                           height: 3,
@@ -819,11 +1117,10 @@ export function PaymentForm() {
                       </div>
                       <style>{`
                         @keyframes qr-scan-pulse {
-                          0% { transform: translateX(-100%); }
+                          0%   { transform: translateX(-100%); }
                           100% { transform: translateX(350%); }
                         }
                       `}</style>
-
                       <div
                         style={{
                           display: "flex",
@@ -835,10 +1132,12 @@ export function PaymentForm() {
                           fontWeight: 700,
                         }}
                       >
-                        <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} />
+                        <span
+                          className="spinner"
+                          style={{ width: 13, height: 13, borderWidth: 2 }}
+                        />
                         Waiting for payment · {qrPollingSeconds}s
                       </div>
-
                       <button
                         onClick={stopPolling}
                         style={{
@@ -855,7 +1154,6 @@ export function PaymentForm() {
                       </button>
                     </>
                   ) : (
-                    /* Polling stopped (cancelled) — offer manual restart */
                     <button
                       className="btn btn-secondary"
                       style={{ width: "100%", fontSize: 13, padding: "10px" }}
@@ -866,22 +1164,6 @@ export function PaymentForm() {
                     </button>
                   )}
                 </div>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    background: "var(--bg)",
-                    borderRadius: 6,
-                    padding: "8px 10px",
-                    fontSize: 10,
-                    color: "var(--text-muted)",
-                    fontFamily: "var(--font-mono)",
-                    wordBreak: "break-all",
-                    textAlign: "left",
-                  }}
-                >
-                  {qrData.slice(0, 100)}...
-                </div>
               </div>
             )}
           </div>
@@ -891,12 +1173,20 @@ export function PaymentForm() {
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  SUB-COMPONENTS
+// ─────────────────────────────────────────────────────────────
 
 function SplitCard({
-  icon, label, amount, color,
+  icon,
+  label,
+  amount,
+  color,
 }: {
-  icon: string; label: string; amount: string; color: string;
+  icon: string;
+  label: string;
+  amount: string;
+  color: string;
 }) {
   return (
     <div
@@ -904,13 +1194,13 @@ function SplitCard({
         background: "var(--bg)",
         border: `1px solid ${color}44`,
         borderRadius: 10,
-        padding: 16,
+        padding: 14,
         textAlign: "center",
       }}
     >
-      <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontWeight: 800, fontSize: 16, color, fontFamily: "var(--font-mono)" }}>
+      <div style={{ fontSize: 26, marginBottom: 5 }}>{icon}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontWeight: 800, fontSize: 14, color, fontFamily: "var(--font-mono)" }}>
         {amount}
       </div>
     </div>
@@ -918,9 +1208,17 @@ function SplitCard({
 }
 
 function SplitRow({
-  label, value, color, icon, bold,
+  label,
+  value,
+  color,
+  icon,
+  bold,
 }: {
-  label: string; value: string; color: string; icon?: string; bold?: boolean;
+  label: string;
+  value: string;
+  color: string;
+  icon?: string;
+  bold?: boolean;
 }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -942,6 +1240,56 @@ function SplitRow({
   );
 }
 
+function StepDot({
+  active,
+  done,
+  label,
+}: {
+  active: boolean;
+  done: boolean;
+  label: string;
+}) {
+  const color = done ? "var(--green)" : active ? "var(--accent)" : "var(--border)";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: "50%",
+          background: color,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          color: "white",
+          fontWeight: 800,
+          transition: "all 0.3s",
+        }}
+      >
+        {done ? "✓" : active ? "●" : "○"}
+      </div>
+      <div style={{ fontSize: 10, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function StepLine({ done }: { done: boolean }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        height: 2,
+        marginTop: 10,
+        background: done ? "var(--green)" : "var(--border)",
+        transition: "background 0.3s",
+      }}
+    />
+  );
+}
+
 function PageWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
@@ -953,7 +1301,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontWeight: 700,
-  fontSize: 13,
+  fontSize: 12,
   color: "var(--text-secondary)",
   marginBottom: 8,
   textTransform: "uppercase",
