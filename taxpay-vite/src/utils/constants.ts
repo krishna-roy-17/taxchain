@@ -13,7 +13,7 @@ export const RPC_ENDPOINT = clusterApiUrl(NETWORK);
 // ─── Government Wallet (Demo) ────────────────────────────────
 // Replace with actual government / tax authority wallet for production
 export const DEMO_GOVERNMENT_WALLET = new PublicKey(
-  "EKNbbP9birZsvXqoi3aekfKseXKDQco2QeYWXcQCKsZ3"
+  "2WyqhoFUavZKSg1TTpfquiBy2joqbPHzdGxUsnPvrW2s"
 );
 
 // ─── Tax config ───────────────────────────────────────────────

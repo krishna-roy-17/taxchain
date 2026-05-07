@@ -1,190 +1,298 @@
-import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
-import {
-  createNft,
-  mplTokenMetadata,
-  TokenStandard,
-} from "@metaplex-foundation/mpl-token-metadata";
-import {
-  generateSigner,
-  percentAmount,
-  publicKey as umiPublicKey,
-  signerIdentity,
-  createSignerFromKeypair,
-} from "@metaplex-foundation/umi";
-import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters";
-import { clusterApiUrl } from "@solana/web3.js";
-import { lamportsToSol, bpsToPercent } from "./constants";
+// import { useMemo } from "react";
+// import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+// import { AnchorProvider, Program, BN } from "@coral-xyz/anchor";
+// import {
+//   PublicKey,
+//   SystemProgram,
+//   Transaction,
+//   VersionedTransaction,
+// } from "@solana/web3.js";
+// import idlJson from "../idl/taxpay.json";
+// import {
+//   PROGRAM_ID,
+//   BUSINESS_SEED,
+//   TAX_RECORD_SEED,
+//   calcTaxSplit,
+// } from "../utils/constants";
+// import { buildNFTMintInstructions, NFTReceiptParams } from "../utils/nftReceipt";
+// import {
+//   toWeb3JsInstruction,
+//   toWeb3JsKeypair,
+// } from "@metaplex-foundation/umi-web3js-adapters";
 
-// ─────────────────────────────────────────────────────────────
-//  TYPES
-// ─────────────────────────────────────────────────────────────
-export interface NFTReceiptParams {
-  wallet:          any;
-  receiptNumber:   number;
-  businessName:    string;
-  productName:     string;
-  totalLamports:   number;
-  taxLamports:     number;
-  netLamports:     number;
-  taxRateBps:      number;
-  timestamp:       number;
-  txRecordPDA:     string;
-  txSignature:     string;
-  payerWallet:     string;
-  businessWallet:  string;
-  govWallet:       string;
-}
+// // ─────────────────────────────────────────────────────────────
+// //  PDA HELPERS
+// // ─────────────────────────────────────────────────────────────
+// export function deriveBusinessPDA(ownerPubkey: PublicKey): [PublicKey, number] {
+//   return PublicKey.findProgramAddressSync(
+//     [Buffer.from(BUSINESS_SEED), ownerPubkey.toBuffer()],
+//     PROGRAM_ID
+//   );
+// }
 
-export interface NFTReceiptResult {
-  mintAddress: string;
-  metadataUri: string;
-  explorerUrl: string;
-}
+// export function deriveTaxRecordPDA(
+//   businessPDA: PublicKey,
+//   txIndex: number
+// ): [PublicKey, number] {
+//   const countBuf = Buffer.alloc(8);
+//   countBuf.writeBigUInt64LE(BigInt(txIndex));
+//   return PublicKey.findProgramAddressSync(
+//     [Buffer.from(TAX_RECORD_SEED), businessPDA.toBuffer(), countBuf],
+//     PROGRAM_ID
+//   );
+// }
 
-// ─────────────────────────────────────────────────────────────
-//  UPLOAD METADATA TO IPFS
-// ─────────────────────────────────────────────────────────────
-async function uploadToIPFS(metadata: object): Promise<string> {
-  const jwt = import.meta.env.VITE_PINATA_JWT;
+// export function buildSolanaPayUrl(
+//   recipientPubkey: PublicKey,
+//   amountSol: number,
+//   productName: string,
+//   businessName: string
+// ): string {
+//   const amount = amountSol.toFixed(9).replace(/\.?0+$/, "");
+//   const label = encodeURIComponent(businessName);
+//   const message = encodeURIComponent(productName);
+//   const memo = encodeURIComponent(productName.slice(0, 32));
+//   const query = `amount=${amount}&label=${label}&message=${message}&memo=${memo}`;
+//   return `solana:${recipientPubkey.toBase58()}?${query}`;
+// }
 
-  if (!jwt || jwt === "paste_your_pinata_jwt_here") {
-    console.warn("⚠ No Pinata JWT — using placeholder metadata URI");
-    return "https://arweave.net/taxchain-receipt-demo";
-  }
+// // ─────────────────────────────────────────────────────────────
+// //  HOOK
+// // ─────────────────────────────────────────────────────────────
+// export function useProgram() {
+//   const { connection } = useConnection();
+//   const wallet = useWallet();
 
-  try {
-    const res = await fetch(
-      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({
-          pinataContent: metadata,
-          pinataMetadata: { name: "TaxChain Receipt NFT" },
-        }),
-      }
-    );
+//   const provider = useMemo(() => {
+//     if (!wallet?.publicKey || !wallet.signTransaction) return null;
+//     return new AnchorProvider(connection, wallet as any, {
+//       commitment: "confirmed",
+//       preflightCommitment: "confirmed",
+//     });
+//   }, [connection, wallet]);
 
-    if (!res.ok) throw new Error(`Pinata error: ${res.status}`);
-    const data = await res.json();
-    return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
-  } catch (e) {
-    console.error("IPFS upload failed:", e);
-    return "https://arweave.net/taxchain-receipt-demo";
-  }
-}
+//   const program = useMemo(() => {
+//     if (!provider) return null;
+//     try {
+//       const p = new Program(idlJson as any, provider);
+//       console.log("✅ Program ready:", p.programId.toBase58());
+//       return p;
+//     } catch (e) {
+//       console.error("❌ Program init failed:", e);
+//       return null;
+//     }
+//   }, [provider]);
 
-// ─────────────────────────────────────────────────────────────
-//  BUILD NFT METADATA
-// ─────────────────────────────────────────────────────────────
-function buildNFTMetadata(p: NFTReceiptParams) {
-  const totalSol  = lamportsToSol(p.totalLamports);
-  const taxSol    = lamportsToSol(p.taxLamports);
-  const netSol    = lamportsToSol(p.netLamports);
-  const taxPct    = bpsToPercent(p.taxRateBps);
-  const date      = new Date(p.timestamp * 1000).toLocaleString();
-  const receiptNo = String(p.receiptNumber).padStart(4, "0");
+//   // ── Initialize Business ───────────────────────────────────
+//   const initializeBusiness = async (
+//     businessName: string,
+//     taxRateBps: number,
+//     governmentWallet: PublicKey
+//   ) => {
+//     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
+//     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
+//     const tx = await (program.methods as any)
+//       .initializeBusiness(businessName, new BN(taxRateBps))
+//       .accounts({
+//         businessAccount: businessPDA,
+//         owner: wallet.publicKey,
+//         governmentWallet,
+//         systemProgram: SystemProgram.programId,
+//       })
+//       .rpc({ commitment: "confirmed" });
+//     console.log("✅ Business initialized:", tx);
+//     return { tx, businessPDA };
+//   };
 
-  return {
-    name:        `TaxChain Receipt #${receiptNo}`,
-    symbol:      "TXRCPT",
-    description: `Official blockchain tax receipt. Payment of ${totalSol.toFixed(4)} SOL to ${p.businessName}. Tax of ${taxSol.toFixed(4)} SOL (${taxPct}%) automatically collected.`,
-    image:       `https://placehold.co/600x600/0d0d14/6c47ff?text=TaxChain%0AReceipt+%23${receiptNo}`,
-    external_url: "https://taxchain.app",
-    attributes: [
-      { trait_type: "Receipt Number",    value: `#${receiptNo}` },
-      { trait_type: "Business",          value: p.businessName },
-      { trait_type: "Product",           value: p.productName || "Payment" },
-      { trait_type: "Total Paid",        value: `${totalSol.toFixed(6)} SOL` },
-      { trait_type: "Tax Collected",     value: `${taxSol.toFixed(6)} SOL` },
-      { trait_type: "Net to Business",   value: `${netSol.toFixed(6)} SOL` },
-      { trait_type: "Tax Rate",          value: `${taxPct}%` },
-      { trait_type: "Date",              value: date },
-      { trait_type: "Network",           value: "Solana Devnet" },
-      { trait_type: "Verified",          value: "true" },
-      { trait_type: "TxRecord PDA",      value: p.txRecordPDA },
-      { trait_type: "Transaction",       value: p.txSignature },
-      { trait_type: "Government Wallet", value: p.govWallet },
-    ],
-    properties: {
-      category: "receipt",
-      files: [],
-      creators: [{ address: p.businessWallet, share: 100 }],
-    },
-  };
-}
+//   // ── Fetch Business Account ────────────────────────────────
+//   const fetchBusiness = async (ownerPubkey?: PublicKey) => {
+//     if (!program) return null;
+//     const owner = ownerPubkey ?? wallet.publicKey;
+//     if (!owner) return null;
+//     try {
+//       const [businessPDA] = deriveBusinessPDA(owner);
+//       const account = await (program.account as any).businessAccount.fetch(businessPDA);
+//       return { account, businessPDA };
+//     } catch {
+//       return null;
+//     }
+//   };
 
-// ─────────────────────────────────────────────────────────────
-//  MAIN: MINT NFT RECEIPT
-// ─────────────────────────────────────────────────────────────
-export async function mintNFTReceipt(
-  params: NFTReceiptParams
-): Promise<NFTReceiptResult> {
-  console.log("🧾 Starting NFT receipt minting...");
+//   // ── Pay with Tax + Optional NFT (ONE confirmation) ───────
+//   const payWithTax = async (
+//     businessOwnerPubkey: PublicKey,
+//     totalLamports: number,
+//     productName: string,
+//     invoiceIpfsHash: string = "",
+//     nftParams?: Omit<NFTReceiptParams, "txSignature" | "txRecordPDA"> // passed when mintNFT=true
+//   ) => {
+//     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
 
-  // 1. Build + upload metadata
-  const metadata    = buildNFTMetadata(params);
-  console.log("📋 Metadata built:", metadata.name);
+//     const [businessPDA] = deriveBusinessPDA(businessOwnerPubkey);
 
-  console.log("📤 Uploading to IPFS...");
-  const metadataUri = await uploadToIPFS(metadata);
-  console.log("✅ Metadata URI:", metadataUri);
+//     let businessData: any;
+//     try {
+//       businessData = await (program.account as any).businessAccount.fetch(businessPDA);
+//     } catch {
+//       throw new Error("Business not initialized. Go to Setup tab and register first.");
+//     }
 
-  // 2. Setup UMI with wallet adapter identity
-  //    walletAdapterIdentity wraps the adapter so UMI can sign transactions
-  const umi = createUmi(clusterApiUrl("devnet"))
-    .use(mplTokenMetadata())
-    .use(walletAdapterIdentity(params.wallet));
+//     const split = calcTaxSplit(totalLamports, businessData.taxRateBps.toNumber());
+//     const txIndex = businessData.transactionCount.toNumber();
+//     const [taxRecordPDA] = deriveTaxRecordPDA(businessPDA, txIndex);
 
-  // 3. Generate a fresh mint keypair
-  const mint = generateSigner(umi);
-  console.log("🔑 Mint address:", mint.publicKey);
+//     // ── 1. Build Anchor payment instruction ──────────────
+//     const payIx = await (program.methods as any)
+//       .payWithTax(
+//         new BN(totalLamports),
+//         invoiceIpfsHash.slice(0, 64),
+//         productName.slice(0, 64)
+//       )
+//       .accounts({
+//         businessAccount: businessPDA,
+//         payer: wallet.publicKey,
+//         businessOwner: businessOwnerPubkey,
+//         governmentWallet: businessData.governmentWallet,
+//         systemProgram: SystemProgram.programId,
+//       })
+//       .instruction(); // ← get instruction only, don't send yet
 
-  // 4. Mint the NFT
-  //    - The NFT is minted to `tokenOwner` (the customer's wallet)
-  //    - `isMutable: false` locks the receipt permanently
-  //    - `sellerFeeBasisPoints: 0` = no royalties
-  console.log("⛏ Minting NFT to:", params.payerWallet);
+//     // ── 2. If no NFT, just send payment alone ────────────
+//     if (!nftParams) {
+//       const tx = new Transaction().add(payIx);
+//       const { blockhash, lastValidBlockHeight } =
+//         await connection.getLatestBlockhash("confirmed");
+//       tx.recentBlockhash = blockhash;
+//       tx.feePayer = wallet.publicKey;
 
-  try {
-    const tx = await createNft(umi, {
-      mint,
-      name:                 metadata.name,
-      symbol:               metadata.symbol,
-      uri:                  metadataUri,
-      sellerFeeBasisPoints: percentAmount(0),
-      // FIX: use `tokenOwner` correctly — this IS supported in
-      // mpl-token-metadata v3+ for directing the initial token account
-      tokenOwner:           umiPublicKey(params.payerWallet),
-      isMutable:            false,
-      isCollection:         false,
-    }).sendAndConfirm(umi, {
-      // Increase commitment + preflight checks for devnet reliability
-      send: { skipPreflight: false },
-      confirm: { commitment: "confirmed" },
-    });
+//       const signed = await wallet.signTransaction!(tx);
+//       const sig = await connection.sendRawTransaction(signed.serialize());
+//       await connection.confirmTransaction(
+//         { signature: sig, blockhash, lastValidBlockHeight },
+//         "confirmed"
+//       );
+//       console.log("✅ Payment tx:", sig);
+//       return { tx: sig, taxRecordPDA, split };
+//     }
 
-    // `tx.signature` is a Uint8Array — convert to base58 string for logging
-    const bs58 = await import("bs58");
-    const sigString = bs58.default.encode(tx.signature);
+//     // ── 3. Build NFT instructions (upload metadata first) ─
+//     console.log("📤 Uploading NFT metadata...");
+//     const { umi, builder, mint, metadataUri } = await buildNFTMintInstructions({
+//       ...nftParams,
+//       txSignature: "pending", // placeholder — not known yet
+//       txRecordPDA: taxRecordPDA.toBase58(),
+//     });
 
-    const mintAddress = mint.publicKey.toString();
-    const explorerUrl = `https://explorer.solana.com/address/${mintAddress}?cluster=devnet`;
+//     // ── 4. Extract NFT instructions from UMI builder ─────
+//     //    Build the UMI transaction to get its instructions,
+//     //    then convert each to web3.js format and append
+//     const umiTx = await builder.buildWithLatestBlockhash(umi);
+//     const nftInstructions = umiTx.message.instructions.map(
+//       (ix: any) => toWeb3JsInstruction(ix)
+//     );
 
-    console.log("✅ NFT minted successfully!");
-    console.log("   Mint:", mintAddress);
-    console.log("   Tx sig:", sigString);
-    console.log("   Explorer:", explorerUrl);
+//     // ── 5. Bundle payment + NFT into ONE transaction ──────
+//     const combinedTx = new Transaction();
+//     combinedTx.add(payIx);               // payment first
+//     nftInstructions.forEach((ix: any) => combinedTx.add(ix)); // then NFT
 
-    return { mintAddress, metadataUri, explorerUrl };
+//     const { blockhash, lastValidBlockHeight } =
+//       await connection.getLatestBlockhash("confirmed");
+//     combinedTx.recentBlockhash = blockhash;
+//     combinedTx.feePayer = wallet.publicKey;
 
-  } catch (err: any) {
-    // UMI wraps errors — unwrap for readable message
-    const msg = err?.cause?.message ?? err?.message ?? String(err);
-    console.error("❌ NFT mint failed:", msg);
-    throw new Error(`NFT minting failed: ${msg}`);
-  }
-}
+//     // ── 6. Partial-sign with the NFT mint keypair ─────────
+//     //    The mint account needs to sign because it's a new keypair.
+//     //    The wallet signs everything else (payment + NFT).
+//     const mintKeypair = toWeb3JsKeypair(mint);
+//     combinedTx.partialSign(mintKeypair);
+
+//     // ── 7. Wallet signs → ONE Phantom confirmation ────────
+//     const signed = await wallet.signTransaction!(combinedTx);
+
+//     // ── 8. Send & confirm ─────────────────────────────────
+//     const sig = await connection.sendRawTransaction(signed.serialize(), {
+//       skipPreflight: false,
+//     });
+//     await connection.confirmTransaction(
+//       { signature: sig, blockhash, lastValidBlockHeight },
+//       "confirmed"
+//     );
+
+//     console.log("✅ Payment + NFT tx:", sig);
+
+//     const mintAddress = mint.publicKey.toString();
+//     const explorerUrl = `https://explorer.solana.com/address/${mintAddress}?cluster=devnet`;
+
+//     return {
+//       tx: sig,
+//       taxRecordPDA,
+//       split,
+//       nftMint: mintAddress,
+//       nftUrl: explorerUrl,
+//       metadataUri,
+//     };
+//   };
+
+//   // ── Fetch All Tax Records ─────────────────────────────────
+//   const fetchTaxRecords = async (businessOwnerPubkey?: PublicKey) => {
+//     if (!program) return [];
+//     const owner = businessOwnerPubkey ?? wallet.publicKey;
+//     if (!owner) return [];
+//     try {
+//       const [businessPDA] = deriveBusinessPDA(owner);
+//       const bizData = await (program.account as any).businessAccount.fetch(businessPDA);
+//       const count = bizData.transactionCount.toNumber();
+//       const records = await Promise.all(
+//         Array.from({ length: count }, async (_, i) => {
+//           const [recordPDA] = deriveTaxRecordPDA(businessPDA, i);
+//           try {
+//             const rec = await (program.account as any).taxRecord.fetch(recordPDA);
+//             return { ...rec, pda: recordPDA };
+//           } catch {
+//             return null;
+//           }
+//         })
+//       );
+//       return records.filter(Boolean);
+//     } catch {
+//       return [];
+//     }
+//   };
+
+//   // ── Update Tax Rate ───────────────────────────────────────
+//   const updateTaxRate = async (newTaxRateBps: number) => {
+//     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
+//     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
+//     const tx = await (program.methods as any)
+//       .updateTaxRate(new BN(newTaxRateBps))
+//       .accounts({ businessAccount: businessPDA, owner: wallet.publicKey })
+//       .rpc({ commitment: "confirmed" });
+//     return tx;
+//   };
+
+//   // ── Update Government Wallet ──────────────────────────────
+//   const updateGovernmentWallet = async (newGovWallet: PublicKey) => {
+//     if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
+//     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
+//     const tx = await (program.methods as any)
+//       .updateGovernmentWallet(newGovWallet)
+//       .accounts({ businessAccount: businessPDA, owner: wallet.publicKey })
+//       .rpc({ commitment: "confirmed" });
+//     return tx;
+//   };
+
+//   return {
+//     program,
+//     provider,
+//     deriveBusinessPDA,
+//     deriveTaxRecordPDA,
+//     buildSolanaPayUrl,
+//     initializeBusiness,
+//     fetchBusiness,
+//     payWithTax,
+//     fetchTaxRecords,
+//     updateTaxRate,
+//     updateGovernmentWallet,
+//   };
+// }

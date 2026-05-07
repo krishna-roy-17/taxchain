@@ -263,11 +263,11 @@ export function Dashboard({ setView }: Props) {
                         ((e.currentTarget as HTMLElement).style.background = "transparent")
                       }
                     >
-                      <td style={tdStyle}>
-                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-                          #{r.transactionIndex?.toNumber?.() + 1 || i + 1}
-                        </span>
-                      </td>
+                   <td style={tdStyle}>
+  <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+    #{r.transactionIndex?.toNumber?.() ?? i + 1}
+  </span>
+</td>
                       <td style={tdStyle}>{r.productName || "—"}</td>
                       <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>
                         {lamportsToSol(r.totalAmount.toNumber()).toFixed(4)}

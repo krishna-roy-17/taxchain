@@ -81,7 +81,7 @@ function Footer() {
       fontFamily: "var(--font-mono)",
     }}>
       Built on Solana for automatic tax splitting — © 2026 TaxPay. All rights reserved.
-      Built by Krishna Roy, Rishav Shrestha, Swastika Timalsina.
+      Built by Krishna Roy, Rishav Shrestha, Swastika Timalasena.
     </footer>
   );
 }
