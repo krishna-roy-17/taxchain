@@ -1,72 +1,40 @@
 import React, { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useProgram } from "../hooks/useProgram";
 import {
-  lamportsToSol,
-  formatTimestamp,
-  shortenAddress,
-  bpsToPercent,
+  lamportsToSol, formatTimestamp, shortenAddress, bpsToPercent,
 } from "../utils/constants";
 import { View } from "../App";
 
-interface Props {
-  setView: (v: View) => void;
-}
+interface Props { setView: (v: View) => void; }
 
 export function Dashboard({ setView }: Props) {
   const { publicKey } = useWallet();
   const { fetchBusiness, fetchTaxRecords } = useProgram();
 
   const [business, setBusiness] = useState<any>(null);
-  const [records, setRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [records, setRecords]   = useState<any[]>([]);
+  const [loading, setLoading]   = useState(false);
 
-  // FIX: runs when wallet connects AND every time Dashboard re-mounts
-  // (re-mounts happen every time you navigate back to the dashboard tab)
-  useEffect(() => {
-    if (!publicKey) return;
-    load();
-  }, [publicKey]);
-
-  // FIX: also re-fetch on first mount even if publicKey didn't change
-  // This covers navigating back from the Pay tab after a payment
-  useEffect(() => {
-    if (!publicKey) return;
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { if (!publicKey) return; load(); }, [publicKey]);
+  useEffect(() => { if (!publicKey) return; load(); }, []); // eslint-disable-line
 
   const load = async () => {
     setLoading(true);
     try {
-      const biz = await fetchBusiness();
+      const biz  = await fetchBusiness();
       setBusiness(biz?.account || null);
-
       const recs = await fetchTaxRecords();
       setRecords(recs as any[]);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
-  if (!publicKey) {
-    return (
-      <PageWrapper>
-        <Hero setView={setView} />
-      </PageWrapper>
-    );
-  }
+  if (!publicKey) return <PageWrapper><Hero setView={setView} /></PageWrapper>;
 
   if (loading) {
     return (
@@ -82,14 +50,9 @@ export function Dashboard({ setView }: Props) {
   if (!business) {
     return (
       <PageWrapper>
-        <div
-          className="card animate-slide-up"
-          style={{ maxWidth: 500, margin: "60px auto", textAlign: "center" }}
-        >
+        <div className="card animate-slide-up" style={{ maxWidth: 500, margin: "60px auto", textAlign: "center" }}>
           <div style={{ fontSize: 52, marginBottom: 16 }}>🏢</div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>
-            No Business Found
-          </h2>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>No Business Found</h2>
           <p style={{ color: "var(--text-secondary)", marginBottom: 24 }}>
             You haven't registered a business yet. Set it up to start accepting tax-split payments.
           </p>
@@ -101,78 +64,49 @@ export function Dashboard({ setView }: Props) {
     );
   }
 
-  // Chart data
   const chartData = records.map((r, i) => ({
     tx: `#${i + 1}`,
     revenue: parseFloat(lamportsToSol(r.netAmount.toNumber()).toFixed(6)),
-    tax: parseFloat(lamportsToSol(r.taxAmount.toNumber()).toFixed(6)),
+    tax:     parseFloat(lamportsToSol(r.taxAmount.toNumber()).toFixed(6)),
   }));
 
   return (
     <PageWrapper>
       <div className="animate-slide-up">
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 32,
-          }}
-        >
+        <div className="dashboard-header">
           <div>
-            <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em" }}>
-              {business.name}
-            </h1>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <h1 className="page-header-title">{business.name}</h1>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               <span className="badge badge-purple">
                 {bpsToPercent(business.taxRateBps.toNumber())}% Tax Rate
               </span>
               <span className="badge badge-green">● Live on Devnet</span>
-              <span
-                className="mono"
-                style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 10px" }}
-              >
+              <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 10px" }}>
                 {shortenAddress(business.owner.toBase58(), 6)}
               </span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary" onClick={load} disabled={loading}>
-              ↺ Refresh
-            </button>
-            <button className="btn btn-primary" onClick={() => setView("pay")}>
-              + New Payment
-            </button>
+          <div className="dashboard-header-actions" style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" onClick={load} disabled={loading}>↺ Refresh</button>
+            <button className="btn btn-primary" onClick={() => setView("pay")}>+ New Payment</button>
           </div>
         </div>
 
-        {/* Stats grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
-          <StatCard
-            label="Total Revenue"
+        {/* Stats */}
+        <div className="stat-grid-4">
+          <StatCard label="Total Revenue"
             value={`${lamportsToSol(business.totalRevenue.toNumber()).toFixed(4)} SOL`}
-            icon="💰"
-            color="var(--accent)"
-          />
-          <StatCard
-            label="Tax Collected"
+            icon="💰" color="var(--accent)" />
+          <StatCard label="Tax Collected"
             value={`${lamportsToSol(business.totalTaxCollected.toNumber()).toFixed(4)} SOL`}
-            icon="🏛"
-            color="var(--yellow)"
-          />
-          <StatCard
-            label="Total Transactions"
+            icon="🏛" color="var(--yellow)" />
+          <StatCard label="Total Transactions"
             value={business.transactionCount.toNumber().toString()}
-            icon="⚡"
-            color="var(--green)"
-          />
-          <StatCard
-            label="Tax Rate"
+            icon="⚡" color="var(--green)" />
+          <StatCard label="Tax Rate"
             value={`${bpsToPercent(business.taxRateBps.toNumber())}%`}
-            icon="📊"
-            color="var(--red)"
-          />
+            icon="📊" color="var(--red)" />
         </div>
 
         {/* Chart */}
@@ -184,8 +118,8 @@ export function Dashboard({ setView }: Props) {
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="tx" tick={{ fill: "var(--text-muted)", fontSize: 12 }} />
-                <YAxis tick={{ fill: "var(--text-muted)", fontSize: 12 }} />
+                <XAxis dataKey="tx" tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
+                <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} width={60} />
                 <Tooltip
                   contentStyle={{
                     background: "var(--bg-card)",
@@ -193,24 +127,13 @@ export function Dashboard({ setView }: Props) {
                     borderRadius: 8,
                     color: "var(--text-primary)",
                     fontFamily: "var(--font-mono)",
+                    fontSize: 12,
                   }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="var(--accent)"
-                  strokeWidth={2}
-                  dot={{ fill: "var(--accent)" }}
-                  name="Revenue (SOL)"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="tax"
-                  stroke="var(--yellow)"
-                  strokeWidth={2}
-                  dot={{ fill: "var(--yellow)" }}
-                  name="Tax (SOL)"
-                />
+                <Line type="monotone" dataKey="revenue" stroke="var(--accent)"
+                  strokeWidth={2} dot={{ fill: "var(--accent)" }} name="Revenue (SOL)" />
+                <Line type="monotone" dataKey="tax" stroke="var(--yellow)"
+                  strokeWidth={2} dot={{ fill: "var(--yellow)" }} name="Tax (SOL)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -226,65 +149,47 @@ export function Dashboard({ setView }: Props) {
               No transactions yet. Accept your first payment!
             </div>
           ) : (
-            <div style={{ overflow: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div className="table-scroll">
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 540 }}>
                 <thead>
                   <tr>
                     {["#", "Product", "Total", "Tax", "Net", "Payer", "Time"].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          textAlign: "left",
-                          padding: "8px 12px",
-                          fontSize: 11,
-                          fontFamily: "var(--font-mono)",
-                          color: "var(--text-muted)",
-                          borderBottom: "1px solid var(--border)",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        {h}
-                      </th>
+                      <th key={h} style={{
+                        textAlign: "left", padding: "8px 10px", fontSize: 10,
+                        fontFamily: "var(--font-mono)", color: "var(--text-muted)",
+                        borderBottom: "1px solid var(--border)", letterSpacing: "0.06em",
+                        whiteSpace: "nowrap",
+                      }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {records.map((r: any, i) => (
-                    <tr
-                      key={i}
-                      style={{
-                        borderBottom: "1px solid var(--border)",
-                        transition: "background 0.15s",
-                      }}
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)")
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background = "transparent")
-                      }
+                    <tr key={i}
+                      style={{ borderBottom: "1px solid var(--border)", transition: "background 0.15s" }}
+                      onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "var(--bg-elevated)")}
+                      onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "transparent")}
                     >
-                   <td style={tdStyle}>
-  <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-    #{r.transactionIndex?.toNumber?.() ?? i + 1}
-  </span>
-</td>
+                      <td style={tdStyle}>
+                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontSize: 11 }}>
+                          #{r.transactionIndex?.toNumber?.() ?? i + 1}
+                        </span>
+                      </td>
                       <td style={tdStyle}>{r.productName || "—"}</td>
-                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)" }}>
+                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 12 }}>
                         {lamportsToSol(r.totalAmount.toNumber()).toFixed(4)}
                       </td>
-                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--yellow)" }}>
+                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--yellow)", fontSize: 12 }}>
                         {lamportsToSol(r.taxAmount.toNumber()).toFixed(4)}
                       </td>
-                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
+                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", color: "var(--accent)", fontSize: 12 }}>
                         {lamportsToSol(r.netAmount.toNumber()).toFixed(4)}
                       </td>
-                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                      <td style={{ ...tdStyle, fontFamily: "var(--font-mono)", fontSize: 11 }}>
                         {shortenAddress(r.payer.toBase58())}
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: "var(--text-muted)" }}>
-                        {r.timestamp
-                          ? formatTimestamp(r.timestamp.toNumber())
-                          : "—"}
+                      <td style={{ ...tdStyle, fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                        {r.timestamp ? formatTimestamp(r.timestamp.toNumber()) : "—"}
                       </td>
                     </tr>
                   ))}
@@ -298,27 +203,16 @@ export function Dashboard({ setView }: Props) {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-  color: string;
+function StatCard({ label, value, icon, color }: {
+  label: string; value: string; icon: string; color: string;
 }) {
   return (
-    <div
-      className="card"
-      style={{ borderColor: `${color}33` }}
-    >
-      <div style={{ fontSize: 28, marginBottom: 10 }}>{icon}</div>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.05em", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+    <div className="card" style={{ borderColor: `${color}33` }}>
+      <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.05em", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
         {label.toUpperCase()}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "var(--font-mono)" }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color, fontFamily: "var(--font-mono)" }}>
         {value}
       </div>
     </div>
@@ -327,79 +221,42 @@ function StatCard({
 
 function Hero({ setView }: { setView: (v: View) => void }) {
   return (
-    <div style={{ textAlign: "center", padding: "80px 24px" }}>
-      <div
-        style={{
-          position: "absolute",
-          width: 400,
-          height: 400,
-          background: "radial-gradient(circle, rgba(124,92,252,0.15) 0%, transparent 70%)",
-          borderRadius: "50%",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -60%)",
-          pointerEvents: "none",
-        }}
-      />
-
+    <div style={{ textAlign: "center", padding: "60px 16px" }}>
+      <div style={{
+        position: "absolute", width: 400, height: 400,
+        background: "radial-gradient(circle, rgba(124,92,252,0.15) 0%, transparent 70%)",
+        borderRadius: "50%", top: "50%", left: "50%",
+        transform: "translate(-50%, -60%)", pointerEvents: "none",
+      }} />
       <div style={{ position: "relative" }}>
-        {/* <div className="badge badge-purple" style={{ marginBottom: 20, fontSize: 11 }}>
-          ⚡ SOLANA DEVNET · HACKATHON BUILD
-        </div> */}
-
-        <h1
-          style={{
-            fontSize: 64,
-            fontWeight: 800,
-            letterSpacing: "-0.04em",
-            lineHeight: 1.05,
-            marginBottom: 20,
-          }}
-        >
-          Payments with
-          <br />
+        <h1 className="hero-title" style={{ marginBottom: 20 }}>
+          Payments with<br />
           <span style={{ color: "var(--accent)" }}>Built-in Tax.</span>
         </h1>
-
-        <p
-          style={{
-            fontSize: 18,
-            color: "var(--text-secondary)",
-            maxWidth: 520,
-            margin: "0 auto 40px",
-            lineHeight: 1.6,
-          }}
-        >
+        <p style={{
+          fontSize: 16, color: "var(--text-secondary)",
+          maxWidth: 520, margin: "0 auto 40px", lineHeight: 1.6,
+        }}>
           Every payment automatically splits into business income + tax. Recorded on-chain. Immutable. Verifiable. No fraud possible.
         </p>
-
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" style={{ padding: "16px 32px", fontSize: 16 }} onClick={() => setView("setup")}>
+          <button className="btn btn-primary" style={{ padding: "14px 28px", fontSize: 15 }} onClick={() => setView("setup")}>
             Start as Business →
           </button>
-          <button className="btn btn-secondary" style={{ padding: "16px 32px", fontSize: 16 }} onClick={() => setView("pay")}>
+          <button className="btn btn-secondary" style={{ padding: "14px 28px", fontSize: 15 }} onClick={() => setView("pay")}>
             Make a Payment
           </button>
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 16,
-            marginTop: 64,
-            textAlign: "left",
-          }}
-        >
+        <div className="hero-feature-grid">
           {[
             { icon: "⚡", title: "Instant Split", desc: "Tax separated in the same on-chain transaction. Zero delay." },
             { icon: "🔒", title: "Immutable Records", desc: "Every payment stored permanently. No tampering, no fraud." },
             { icon: "🏛", title: "Gov Dashboard", desc: "Real-time tax visibility for authorities. No manual filing." },
           ].map((f) => (
             <div key={f.title} className="card">
-              <div style={{ fontSize: 28, marginBottom: 10 }}>{f.icon}</div>
+              <div style={{ fontSize: 26, marginBottom: 10 }}>{f.icon}</div>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{f.title}</div>
-              <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>{f.desc}</div>
+              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>{f.desc}</div>
             </div>
           ))}
         </div>
@@ -410,14 +267,12 @@ function Hero({ setView }: { setView: (v: View) => void }) {
 
 function PageWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 var(--page-padding)" }}>
       {children}
     </div>
   );
 }
 
 const tdStyle: React.CSSProperties = {
-  padding: "12px 12px",
-  fontSize: 14,
-  verticalAlign: "middle",
+  padding: "10px 10px", fontSize: 13, verticalAlign: "middle",
 };

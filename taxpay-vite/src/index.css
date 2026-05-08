@@ -23,6 +23,24 @@
   --font-mono: "Space Mono", monospace;
   --radius: 12px;
   --radius-lg: 20px;
+
+  /* Responsive spacing */
+  --page-padding: 24px;
+  --section-gap: 32px;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --page-padding: 16px;
+    --section-gap: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --page-padding: 12px;
+    --section-gap: 16px;
+  }
 }
 
 /* ─── Reset ──────────────────────────────────────────────── */
@@ -74,6 +92,8 @@ body::before {
   font-weight: 700 !important;
   letter-spacing: 0.02em !important;
   transition: all 0.2s ease !important;
+  font-size: 14px !important;
+  padding: 8px 16px !important;
 }
 .wallet-adapter-button:hover {
   opacity: 0.85 !important;
@@ -83,6 +103,13 @@ body::before {
   background: var(--bg-card) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) !important;
+}
+
+@media (max-width: 480px) {
+  .wallet-adapter-button {
+    font-size: 12px !important;
+    padding: 7px 12px !important;
+  }
 }
 
 /* ─── Utility Classes ────────────────────────────────────── */
@@ -96,6 +123,10 @@ body::before {
   transition: border-color 0.2s;
 }
 .card:hover { border-color: var(--border-glow); }
+
+@media (max-width: 480px) {
+  .card { padding: 16px; border-radius: var(--radius); }
+}
 
 .badge {
   display: inline-flex;
@@ -128,6 +159,7 @@ body::before {
   transition: all 0.2s ease;
   text-decoration: none;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
 
@@ -161,6 +193,14 @@ body::before {
   box-shadow: 0 4px 30px rgba(0, 208, 132, 0.5);
 }
 
+@media (max-width: 480px) {
+  .btn {
+    font-size: 13px;
+    padding: 10px 16px;
+    gap: 6px;
+  }
+}
+
 .input {
   width: 100%;
   background: var(--bg);
@@ -176,6 +216,342 @@ body::before {
 .input::placeholder { color: var(--text-muted); }
 .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .input.mono-input { font-family: var(--font-mono); font-size: 13px; }
+
+@media (max-width: 480px) {
+  .input { font-size: 14px; padding: 10px 12px; }
+  .input.mono-input { font-size: 11px; }
+}
+
+/* ─── Responsive Grid Helpers ────────────────────────────── */
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .grid-4 { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ─── Responsive Table ───────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Header / Nav ───────────────────────────────────────── */
+.nav-desktop { display: flex; }
+.nav-mobile { display: none; }
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: 68px;
+  left: 0;
+  right: 0;
+  background: rgba(10, 10, 15, 0.98);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+  z-index: 99;
+  flex-direction: column;
+  gap: 4px;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .nav-desktop { display: none; }
+  .mobile-menu-btn { display: flex; align-items: center; justify-content: center; }
+}
+
+/* ─── Hero Responsive ────────────────────────────────────── */
+.hero-title {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+@media (max-width: 768px) {
+  .hero-title { font-size: 44px; }
+}
+@media (max-width: 480px) {
+  .hero-title { font-size: 32px; }
+}
+
+/* ─── Page Header Responsive ─────────────────────────────── */
+.page-header-title {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+@media (max-width: 768px) {
+  .page-header-title { font-size: 26px; }
+}
+@media (max-width: 480px) {
+  .page-header-title { font-size: 22px; }
+}
+
+/* ─── Payment Form Layout ────────────────────────────────── */
+.payment-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  .payment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Dashboard Header ───────────────────────────────────── */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .dashboard-header-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+  .dashboard-header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* ─── Business Setup - Tax Rate Buttons ──────────────────── */
+.tax-rate-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .tax-rate-row .btn { padding: 7px 10px; font-size: 12px; }
+}
+
+/* ─── Filter Bar ─────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.filter-bar > *:first-child { flex: 2; min-width: 180px; }
+.filter-bar > *:nth-child(2) { flex: 1; min-width: 140px; }
+
+@media (max-width: 600px) {
+  .filter-bar > * { flex: 1 1 100% !important; min-width: 0 !important; }
+}
+
+/* ─── Gov Portal Business Chips ─────────────────────────── */
+.biz-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ─── Stat Cards ─────────────────────────────────────────── */
+.stat-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
+
+/* ─── Info grid (Gov Dashboard) ──────────────────────────── */
+.info-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .info-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .info-grid-4 { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
+
+/* ─── Split preview grid ─────────────────────────────────── */
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 360px) {
+  .split-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Hero feature grid ──────────────────────────────────── */
+.hero-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 64px;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  .hero-feature-grid { grid-template-columns: 1fr; margin-top: 40px; }
+}
+
+/* ─── Gov top bar ────────────────────────────────────────── */
+.gov-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 32px;
+}
+@media (max-width: 600px) {
+  .gov-topbar {
+    padding: 0 16px;
+    height: auto;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* ─── Table action bar ───────────────────────────────────── */
+.table-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.table-action-bar-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── Search card in Gov Search ─────────────────────────── */
+.gov-search-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gov-search-row input { flex: 1; min-width: 200px; }
+.gov-search-row .btn { flex-shrink: 0; }
+
+@media (max-width: 600px) {
+  .gov-search-row { flex-direction: column; }
+  .gov-search-row .btn { width: 100%; }
+}
+
+/* ─── Business setup check bar ───────────────────────────── */
+.check-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+@media (max-width: 480px) {
+  .check-bar { flex-direction: column; align-items: flex-start; }
+  .check-bar .btn { width: 100%; }
+}
+
+/* ─── Wallet address display ─────────────────────────────── */
+.wallet-addr {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+@media (max-width: 600px) {
+  .wallet-addr { font-size: 10px; }
+}
+
+/* ─── Success card buttons ───────────────────────────────── */
+.success-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.success-btns .btn, .success-btns a {
+  flex: 1;
+  min-width: 120px;
+  justify-content: center;
+}
+
+/* ─── GovPortal table header actions ─────────────────────── */
+.live-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ─── Customer History stat cards ────────────────────────── */
+.history-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .history-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .history-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
+
+/* ─── Verify detail grid ─────────────────────────────────── */
+.verify-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .verify-detail-grid { grid-template-columns: 1fr; gap: 12px; }
+}
 
 /* ─── Animated glow ──────────────────────────────────────── */
 @keyframes pulse-glow {
