@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { BaseWalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from "@solana/wallet-adapter-react";
 import { View } from "../App";
 import { shortenAddress } from "../utils/constants";
@@ -135,7 +135,18 @@ export function Header({ view, setView }: HeaderProps) {
                 ● {shortenAddress(publicKey.toBase58())}
               </span>
             )}
-            <WalletMultiButton />
+           
+<BaseWalletMultiButton
+  labels={{
+    'change-wallet': 'Change wallet',
+    connecting: 'Connecting...',
+    'copy-address': 'Copy address',
+    copied: 'Copied',
+    disconnect: 'Disconnect',
+    'has-wallet': 'Connect',
+    'no-wallet': 'Select Wallet',
+  }}
+/>
             {/* Hamburger */}
             <button
               className="mobile-menu-btn"

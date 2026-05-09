@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { BaseWalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useProgram } from "../hooks/useProgram";
 import {
   lamportsToSol,
@@ -124,7 +124,17 @@ export function CustomerHistory() {
             Connect your wallet to see every payment you've made, including
             the tax breakdown for each transaction.
           </p>
-          <WalletMultiButton />
+          <BaseWalletMultiButton
+  labels={{
+    'change-wallet': 'Change wallet',
+    connecting: 'Connecting...',
+    'copy-address': 'Copy address',
+    copied: 'Copied',
+    disconnect: 'Disconnect',
+    'has-wallet': 'Connect',
+    'no-wallet': 'Select Wallet',
+  }}
+/>
         </div>
       </Shell>
     );

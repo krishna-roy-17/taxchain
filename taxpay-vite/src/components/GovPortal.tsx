@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { BaseWalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useProgram } from "../hooks/useProgram";
 import {
   lamportsToSol,
@@ -196,7 +196,17 @@ export function GovPortal() {
             Only transactions from businesses that registered your wallet
             as their tax authority will appear here.
           </p>
-          <WalletMultiButton />
+         <BaseWalletMultiButton
+  labels={{
+    'change-wallet': 'Change wallet',
+    connecting: 'Connecting...',
+    'copy-address': 'Copy address',
+    copied: 'Copied',
+    disconnect: 'Disconnect',
+    'has-wallet': 'Connect',
+    'no-wallet': 'Select Wallet',
+  }}
+/>
         </div>
       </GovShell>
     );
@@ -690,7 +700,17 @@ function GovTopBar({ publicKey, onRefresh, loading }: {
               {shortenAddress(publicKey, 8)}
             </div>
           </div>
-          <WalletMultiButton />
+          <BaseWalletMultiButton
+  labels={{
+    'change-wallet': 'Change wallet',
+    connecting: 'Connecting...',
+    'copy-address': 'Copy address',
+    copied: 'Copied',
+    disconnect: 'Disconnect',
+    'has-wallet': 'Connect',
+    'no-wallet': 'Select Wallet',
+  }}
+/>
         </div>
       </div>
     </div>
