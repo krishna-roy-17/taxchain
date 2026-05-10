@@ -4,6 +4,7 @@ import {
   WalletProvider,
   useWallet,
 } from "@solana/wallet-adapter-react";
+// import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { RPC_ENDPOINT, DEMO_GOVERNMENT_WALLET } from "./utils/constants";
 import { Header } from "./components/Header";
 import { BusinessSetup } from "./components/BusinessSetup";
@@ -20,7 +21,7 @@ export type View =
   | "setup"
   | "government"
   | "verify"
-  | "history";
+  | "history"; // ← added
 
 function AppInner() {
   const { publicKey } = useWallet();
@@ -48,7 +49,7 @@ function AppInner() {
         {view === "pay"        && <PaymentForm />}
         {view === "government" && <GovernmentDashboard />}
         {view === "verify"     && <PaymentVerifier />}
-        {view === "history"    && <CustomerHistory />}
+        {view === "history"    && <CustomerHistory />} {/* ← added */}
       </main>
       <Footer />
     </div>
@@ -61,7 +62,8 @@ export default function App() {
   return (
     <ConnectionProvider endpoint={RPC_ENDPOINT}>
       <WalletProvider wallets={wallets} autoConnect>
-        <AppInner />
+       
+          <AppInner />
       </WalletProvider>
     </ConnectionProvider>
   );
@@ -77,7 +79,7 @@ function Footer() {
       fontSize: "13px",
       fontFamily: "var(--font-mono)",
     }}>
-      Built on Solana for automatic tax splitting — © 2026 TaxPay. All rights reserved.
+      Built on Solana for automatic tax splitting — © 2026 TaxChain. All rights reserved.
       Built by Krishna Roy, Rishav Shrestha, Swastika Timalasena.
     </footer>
   );
