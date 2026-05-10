@@ -10,7 +10,8 @@ interface Props {
 }
 
 export function BusinessSetup({ setView }: Props) {
-  const { publicKey } = useWallet();
+  // ✅ FIXED: Also grab signTransaction to detect if wallet is truly ready
+  const { publicKey, signTransaction, connected } = useWallet();
   const { initializeBusiness, fetchBusiness } = useProgram();
 
   const [businessName, setBusinessName] = useState("");
@@ -30,7 +31,20 @@ export function BusinessSetup({ setView }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!publicKey) return;
+    // ✅ FIXED: Check both publicKey AND signTransaction
+    // On mobile, wallet can be "connected" but signTransaction missing
+    // if the user hasn't fully approved in Phantom/Solflare app
+    if (!publicKey) {
+      setError("Please connect your wallet first.");
+      return;
+    }
+    if (!signTransaction) {
+      setError(
+        "Wallet is not ready to sign. Please open your Phantom/Solflare app and approve the connection."
+      );
+      return;
+    }
+
     setError("");
     setLoading(true);
     try {
@@ -52,19 +66,43 @@ export function BusinessSetup({ setView }: Props) {
       );
       setTxSig(tx);
     } catch (e: any) {
-      setError(e?.message || "Transaction failed");
+      // ✅ FIXED: More descriptive error messages for mobile users
+      const msg: string = e?.message || "Transaction failed";
+      if (msg.includes("Missing signature") || msg.includes("Signature verification")) {
+        setError(
+          "Signature failed — please make sure your wallet is fully connected and try again. On mobile, open Phantom/Solflare and approve the connection request."
+        );
+      } else if (msg.includes("User rejected")) {
+        setError("Transaction was rejected. Please approve the transaction in your wallet app.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ FIXED: Show "not ready" state when connected but signTransaction missing
+  // This happens on mobile when wallet app hasn't fully approved yet
   if (!publicKey) {
     return (
       <PageWrapper>
         <EmptyState
           icon="🔐"
           title="Connect Your Wallet"
-          desc="Connect your Phantom wallet to set up your business."
+          desc="Connect your Phantom or Solflare wallet to set up your business."
+        />
+      </PageWrapper>
+    );
+  }
+
+  if (connected && !signTransaction) {
+    return (
+      <PageWrapper>
+        <EmptyState
+          icon="⏳"
+          title="Wallet Not Ready"
+          desc="Your wallet is connected but not ready to sign. Open your Phantom or Solflare app and approve the connection request, then refresh this page."
         />
       </PageWrapper>
     );
@@ -73,9 +111,14 @@ export function BusinessSetup({ setView }: Props) {
   if (txSig) {
     return (
       <PageWrapper>
-        <div className="card animate-slide-up" style={{ maxWidth: 560, margin: "0 auto", textAlign: "center" }}>
+        <div
+          className="card animate-slide-up"
+          style={{ maxWidth: 560, margin: "0 auto", textAlign: "center" }}
+        >
           <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-          <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Business Registered!</h2>
+          <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>
+            Business Registered!
+          </h2>
           <p style={{ color: "var(--text-secondary)", marginBottom: 24 }}>
             Your business is now live on the Solana blockchain.
           </p>
@@ -89,8 +132,19 @@ export function BusinessSetup({ setView }: Props) {
               wordBreak: "break-all",
             }}
           >
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4, fontFamily: "var(--font-mono)" }}>TRANSACTION SIGNATURE</div>
-            <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>{txSig}</span>
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--text-muted)",
+                marginBottom: 4,
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              TRANSACTION SIGNATURE
+            </div>
+            <span className="mono" style={{ fontSize: 12, color: "var(--accent)" }}>
+              {txSig}
+            </span>
           </div>
           <a
             href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
@@ -101,7 +155,10 @@ export function BusinessSetup({ setView }: Props) {
           >
             🔍 View on Explorer
           </a>
-          <button className="btn btn-primary" onClick={() => setView("dashboard")}>
+          <button
+            className="btn btn-primary"
+            onClick={() => setView("dashboard")}
+          >
             Go to Dashboard →
           </button>
         </div>
@@ -123,18 +180,40 @@ export function BusinessSetup({ setView }: Props) {
 
         {/* Check existing */}
         <div className="card" style={{ marginBottom: 24, padding: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <span style={{ color: "var(--text-secondary)", fontSize: 14 }}>
               Already have a business registered?
             </span>
-            <button className="btn btn-secondary" style={{ padding: "8px 16px", fontSize: 13 }} onClick={handleCheck} disabled={checking}>
+            <button
+              className="btn btn-secondary"
+              style={{ padding: "8px 16px", fontSize: 13 }}
+              onClick={handleCheck}
+              disabled={checking}
+            >
               {checking ? <span className="spinner" /> : "Check"}
             </button>
           </div>
           {existingBusiness && (
-            <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--green-dim)", borderRadius: 8, border: "1px solid var(--green)" }}>
-              <span style={{ color: "var(--green)", fontSize: 13, fontWeight: 700 }}>
-                ✓ Found: "{existingBusiness.name}" · Tax: {bpsToPercent(existingBusiness.taxRateBps.toNumber())}%
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: "var(--green-dim)",
+                borderRadius: 8,
+                border: "1px solid var(--green)",
+              }}
+            >
+              <span
+                style={{ color: "var(--green)", fontSize: 13, fontWeight: 700 }}
+              >
+                ✓ Found: "{existingBusiness.name}" · Tax:{" "}
+                {bpsToPercent(existingBusiness.taxRateBps.toNumber())}%
               </span>
             </div>
           )}
@@ -188,7 +267,9 @@ export function BusinessSetup({ setView }: Props) {
 
             {/* Government Wallet */}
             <div>
-              <label style={labelStyle}>Government / Tax Authority Wallet *</label>
+              <label style={labelStyle}>
+                Government / Tax Authority Wallet *
+              </label>
               <input
                 className="input mono-input"
                 placeholder="Solana public key of tax authority"
@@ -196,7 +277,8 @@ export function BusinessSetup({ setView }: Props) {
                 onChange={(e) => setGovWallet(e.target.value)}
               />
               <div style={hintStyle}>
-                Tax payments will be sent directly to this wallet. Demo uses a placeholder address.
+                Tax payments will be sent directly to this wallet. Demo uses a
+                placeholder address.
               </div>
             </div>
 
@@ -210,18 +292,55 @@ export function BusinessSetup({ setView }: Props) {
                   padding: 16,
                 }}
               >
-                <div style={{ fontSize: 12, color: "var(--accent)", fontWeight: 700, marginBottom: 8 }}>PREVIEW</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--accent)",
+                    fontWeight: 700,
+                    marginBottom: 8,
+                  }}
+                >
+                  PREVIEW
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 8,
+                  }}
+                >
                   <Stat label="Business" value={businessName} />
                   <Stat label="Tax Rate" value={`${taxRatePct}%`} />
-                  <Stat label="On a ₹1000 sale" value={`₹${Math.round((1000 * parseFloat(taxRatePct || "0")) / 100)} tax`} />
-                  <Stat label="Net to You" value={`₹${1000 - Math.round((1000 * parseFloat(taxRatePct || "0")) / 100)}`} />
+                  <Stat
+                    label="On a ₹1000 sale"
+                    value={`₹${Math.round(
+                      (1000 * parseFloat(taxRatePct || "0")) / 100
+                    )} tax`}
+                  />
+                  <Stat
+                    label="Net to You"
+                    value={`₹${
+                      1000 -
+                      Math.round(
+                        (1000 * parseFloat(taxRatePct || "0")) / 100
+                      )
+                    }`}
+                  />
                 </div>
               </div>
             )}
 
             {error && (
-              <div style={{ background: "var(--red-dim)", border: "1px solid var(--red)", borderRadius: 8, padding: "12px 16px", color: "var(--red)", fontSize: 14 }}>
+              <div
+                style={{
+                  background: "var(--red-dim)",
+                  border: "1px solid var(--red)",
+                  borderRadius: 8,
+                  padding: "12px 16px",
+                  color: "var(--red)",
+                  fontSize: 14,
+                }}
+              >
                 ⚠ {error}
               </div>
             )}
@@ -233,7 +352,9 @@ export function BusinessSetup({ setView }: Props) {
               disabled={loading || !businessName || !govWallet}
             >
               {loading ? (
-                <><span className="spinner" /> Submitting to Blockchain...</>
+                <>
+                  <span className="spinner" /> Submitting to Blockchain...
+                </>
               ) : (
                 "🚀 Register Business on Solana"
               )}
@@ -248,13 +369,30 @@ export function BusinessSetup({ setView }: Props) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>{label}</div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--text-muted)",
+          fontFamily: "var(--font-mono)",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
       <div style={{ fontWeight: 700, fontSize: 15 }}>{value}</div>
     </div>
   );
 }
 
-function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+function EmptyState({
+  icon,
+  title,
+  desc,
+}: {
+  icon: string;
+  title: string;
+  desc: string;
+}) {
   return (
     <div style={{ textAlign: "center", padding: "60px 24px" }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>{icon}</div>
