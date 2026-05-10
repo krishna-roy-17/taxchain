@@ -4,7 +4,7 @@ import {
   WalletProvider,
   useWallet,
 } from "@solana/wallet-adapter-react";
-// import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { RPC_ENDPOINT, DEMO_GOVERNMENT_WALLET } from "./utils/constants";
 import { Header } from "./components/Header";
 import { BusinessSetup } from "./components/BusinessSetup";
@@ -62,8 +62,9 @@ export default function App() {
   return (
     <ConnectionProvider endpoint={RPC_ENDPOINT}>
       <WalletProvider wallets={wallets} autoConnect>
-       
+        <WalletModalProvider>
           <AppInner />
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
