@@ -4,11 +4,7 @@ import {
   WalletProvider,
   useWallet,
 } from "@solana/wallet-adapter-react";
-
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { RPC_ENDPOINT, DEMO_GOVERNMENT_WALLET } from "./utils/constants";
 import { Header } from "./components/Header";
 import { BusinessSetup } from "./components/BusinessSetup";
@@ -19,16 +15,13 @@ import { PaymentVerifier } from "./components/PaymentVerifier";
 import { GovPortal } from "./components/GovPortal";
 import { CustomerHistory } from "./components/CustomerHistory";
 
-// ✅ Import wallet adapter CSS (required for modal UI)
-import "@solana/wallet-adapter-react-ui/styles.css";
-
 export type View =
   | "dashboard"
   | "pay"
   | "setup"
   | "government"
   | "verify"
-  | "history";
+  | "history"; // ← added
 
 function AppInner() {
   const { publicKey } = useWallet();
@@ -56,7 +49,7 @@ function AppInner() {
         {view === "pay"        && <PaymentForm />}
         {view === "government" && <GovernmentDashboard />}
         {view === "verify"     && <PaymentVerifier />}
-        {view === "history"    && <CustomerHistory />}
+        {view === "history"    && <CustomerHistory />} {/* ← added */}
       </main>
       <Footer />
     </div>
@@ -64,22 +57,14 @@ function AppInner() {
 }
 
 export default function App() {
-  // ✅ FIXED: Added actual wallet adapters — was empty [] before!
-  // Phantom + Solflare both support mobile (deep links + in-app browser)
-  // Torus works as web-based fallback (no extension needed)
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
-    []
-  );
+  const wallets = useMemo(() => [], []);
 
   return (
     <ConnectionProvider endpoint={RPC_ENDPOINT}>
-      {/* ✅ autoConnect: reconnects wallet automatically on page reload */}
       <WalletProvider wallets={wallets} autoConnect>
-        <AppInner />
+        <WalletModalProvider>
+          <AppInner />
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
@@ -87,17 +72,15 @@ export default function App() {
 
 function Footer() {
   return (
-    <footer
-      style={{
-        borderTop: "1px solid var(--border)",
-        padding: "24px",
-        textAlign: "center",
-        color: "var(--text-muted)",
-        fontSize: "13px",
-        fontFamily: "var(--font-mono)",
-      }}
-    >
-      Built on Solana for automatic tax splitting — © 2026 TaxChain. All rights reserved.
+    <footer style={{
+      borderTop: "1px solid var(--border)",
+      padding: "24px",
+      textAlign: "center",
+      color: "var(--text-muted)",
+      fontSize: "13px",
+      fontFamily: "var(--font-mono)",
+    }}>
+      Built on Solana for automatic tax splitting — © 2026 TaxPay. All rights reserved.
       Built by Krishna Roy, Rishav Shrestha, Swastika Timalasena.
     </footer>
   );

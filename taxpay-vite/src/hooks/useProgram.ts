@@ -54,35 +54,12 @@ export function useProgram() {
   const wallet = useWallet();
 
   const provider = useMemo(() => {
-    // ✅ FIXED: Check all required signing methods explicitly
-    // On mobile, wallet may have publicKey but missing signTransaction
-    // until user fully approves the connection in Phantom/Solflare app
-    if (
-      !wallet.publicKey ||
-      !wallet.signTransaction ||
-      !wallet.signAllTransactions
-    ) {
-      console.warn("⚠️ Wallet not fully connected — missing signer methods");
-      return null;
-    }
-
-    console.log("✅ Wallet connected:", wallet.publicKey.toBase58());
-
-    return new AnchorProvider(
-      connection,
-      {
-        // ✅ FIXED: Explicitly build wallet object instead of casting as any
-        // This ensures signTransaction and signAllTransactions are always present
-        publicKey: wallet.publicKey,
-        signTransaction: wallet.signTransaction,
-        signAllTransactions: wallet.signAllTransactions,
-      },
-      {
-        commitment: "confirmed",
-        preflightCommitment: "confirmed",
-      }
-    );
-  }, [connection, wallet.publicKey, wallet.signTransaction, wallet.signAllTransactions]);
+    if (!wallet?.publicKey || !wallet.signTransaction) return null;
+    return new AnchorProvider(connection, wallet as any, {
+      commitment: "confirmed",
+      preflightCommitment: "confirmed",
+    });
+  }, [connection, wallet]);
 
   const program = useMemo(() => {
     if (!provider) return null;
@@ -102,23 +79,8 @@ export function useProgram() {
     taxRateBps: number,
     governmentWallet: PublicKey
   ) => {
-    if (!program || !wallet.publicKey)
-      throw new Error("Wallet not connected. Please connect your wallet first.");
-
-    // ✅ FIXED: Extra guard — make sure signer is available before tx
-    if (!wallet.signTransaction)
-      throw new Error("Wallet cannot sign transactions. Try reconnecting.");
-
+    if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
-
-    console.log("🚀 Registering business:", {
-      businessName,
-      taxRateBps,
-      owner: wallet.publicKey.toBase58(),
-      businessPDA: businessPDA.toBase58(),
-      governmentWallet: governmentWallet.toBase58(),
-    });
-
     const tx = await (program.methods as any)
       .initializeBusiness(businessName, new BN(taxRateBps))
       .accounts({
@@ -128,7 +90,6 @@ export function useProgram() {
         systemProgram: SystemProgram.programId,
       })
       .rpc({ commitment: "confirmed" });
-
     console.log("✅ Business initialized:", tx);
     return { tx, businessPDA };
   };
@@ -140,9 +101,7 @@ export function useProgram() {
     if (!owner) return null;
     try {
       const [businessPDA] = deriveBusinessPDA(owner);
-      const account = await (program.account as any).businessAccount.fetch(
-        businessPDA
-      );
+      const account = await (program.account as any).businessAccount.fetch(businessPDA);
       return { account, businessPDA };
     } catch {
       return null;
@@ -156,29 +115,18 @@ export function useProgram() {
     productName: string,
     invoiceIpfsHash: string = ""
   ) => {
-    if (!program || !wallet.publicKey)
-      throw new Error("Wallet not connected. Please connect your wallet first.");
-
-    if (!wallet.signTransaction)
-      throw new Error("Wallet cannot sign transactions. Try reconnecting.");
+    if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
 
     const [businessPDA] = deriveBusinessPDA(businessOwnerPubkey);
 
     let businessData: any;
     try {
-      businessData = await (program.account as any).businessAccount.fetch(
-        businessPDA
-      );
+      businessData = await (program.account as any).businessAccount.fetch(businessPDA);
     } catch {
-      throw new Error(
-        "Business not initialized. Go to Setup tab and register first."
-      );
+      throw new Error("Business not initialized. Go to Setup tab and register first.");
     }
 
-    const split = calcTaxSplit(
-      totalLamports,
-      businessData.taxRateBps.toNumber()
-    );
+    const split = calcTaxSplit(totalLamports, businessData.taxRateBps.toNumber());
     const txIndex = businessData.transactionCount.toNumber();
 
     console.log("💸 payWithTax →", {
@@ -218,17 +166,13 @@ export function useProgram() {
     if (!owner) return [];
     try {
       const [businessPDA] = deriveBusinessPDA(owner);
-      const bizData = await (program.account as any).businessAccount.fetch(
-        businessPDA
-      );
+      const bizData = await (program.account as any).businessAccount.fetch(businessPDA);
       const count = bizData.transactionCount.toNumber();
       const records = await Promise.all(
         Array.from({ length: count }, async (_, i) => {
           const [recordPDA] = deriveTaxRecordPDA(businessPDA, i);
           try {
-            const rec = await (program.account as any).taxRecord.fetch(
-              recordPDA
-            );
+            const rec = await (program.account as any).taxRecord.fetch(recordPDA);
             return { ...rec, pda: recordPDA };
           } catch {
             return null;
@@ -243,8 +187,7 @@ export function useProgram() {
 
   // ── Update Tax Rate ───────────────────────────────────────
   const updateTaxRate = async (newTaxRateBps: number) => {
-    if (!program || !wallet.publicKey)
-      throw new Error("Wallet not connected.");
+    if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
     const tx = await (program.methods as any)
       .updateTaxRate(new BN(newTaxRateBps))
@@ -256,8 +199,7 @@ export function useProgram() {
 
   // ── Update Government Wallet ──────────────────────────────
   const updateGovernmentWallet = async (newGovWallet: PublicKey) => {
-    if (!program || !wallet.publicKey)
-      throw new Error("Wallet not connected.");
+    if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
     const [businessPDA] = deriveBusinessPDA(wallet.publicKey);
     const tx = await (program.methods as any)
       .updateGovernmentWallet(newGovWallet)
